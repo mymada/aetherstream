@@ -87,6 +87,7 @@ func TestProtectedRoute(t *testing.T) {
 	authSvc, _ := auth.NewService("test-secret-32-chars-long-for-testing!!", cfg.Auth.TokenTTL)
 	dbConn, _ := db.New(":memory:")
 	defer dbConn.Close()
+	dbConn.Migrate()
 
 	libMgr, _ := library.NewManager(dbConn, "")
 	defer libMgr.Close()

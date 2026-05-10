@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
@@ -67,6 +68,39 @@ func Load(path string) (*Config, error) {
 
 	// 3. Env overrides (AETHERSTREAM_SERVER_PORT, AETHERSTREAM_AUTH_SECRET, etc.)
 	// koanf env provider would go here — keeping simple for now
+	if port := os.Getenv("AETHERSTREAM_SERVER_PORT"); port != "" {
+		if p, err := strconv.Atoi(port); err == nil {
+			cfg.Server.Port = p
+		}
+	}
+	if host := os.Getenv("AETHERSTREAM_SERVER_HOST"); host != "" {
+		cfg.Server.Host = host
+	}
+	if secret := os.Getenv("AETHERSTREAM_AUTH_SECRET"); secret != "" {
+		cfg.Auth.Secret = secret
+	}
+	if ttl := os.Getenv("AETHERSTREAM_AUTH_TOKEN_TTL"); ttl != "" {
+		if t, err := strconv.Atoi(ttl); err == nil {
+			cfg.Auth.TokenTTL = t
+		}
+	}
+	if dbPath := os.Getenv("AETHERSTREAM_DATABASE_PATH"); dbPath != "" {
+		cfg.Database.Path = dbPath
+	}
+	if ffPath := os.Getenv("AETHERSTREAM_FFMPEG_PATH"); ffPath != "" {
+		cfg.FFmpeg.Path = ffPath
+	}
+	if probePath := os.Getenv("AETHERSTREAM_FFMPEG_PROBE_PATH"); probePath != "" {
+		cfg.FFmpeg.ProbePath = probePath
+	}
+	if maxJobs := os.Getenv("AETHERSTREAM_FFMPEG_MAX_JOBS"); maxJobs != "" {
+		if m, err := strconv.Atoi(maxJobs); err == nil {
+			cfg.FFmpeg.MaxJobs = m
+		}
+	}
+	if hwaccel := os.Getenv("AETHERSTREAM_FFMPEG_HWACCEL"); hwaccel != "" {
+		cfg.FFmpeg.HWAccel = hwaccel
+	}
 
 	return cfg, nil
 }

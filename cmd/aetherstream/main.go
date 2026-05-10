@@ -86,6 +86,10 @@ func main() {
 	apiServer := api.NewServer(database, authSvc, cfg, libMgr, secureStore)
 	apiServer.RegisterRoutes(e)
 
+	// Serve Web UI static files
+	e.Static("/", "web/dist")
+	e.File("/", "web/dist/index.html")
+
 	// DLNA/UPnP server
 	dlnaServer := dlna.NewServer(database, cfg.Server.Host, cfg.Server.Port+1, "AetherStream")
 	if err := dlnaServer.Start(); err != nil {

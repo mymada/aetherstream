@@ -144,23 +144,54 @@ func (s *Server) handleAuthCallback(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "not implemented"})
 }
 func (s *Server) handleListUsers(c echo.Context) error {
-	return c.JSON(http.StatusOK, []map[string]string{})
+	users, err := s.db.ListUsers()
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusOK, users)
 }
 
 func (s *Server) handleGetUser(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"id": c.Param("id")})
+	id := c.Param("id")
+	users, err := s.db.ListUsers()
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	for _, u := range users {
+		if uid, ok := u["id"].(string); ok && uid == id {
+			return c.JSON(http.StatusOK, u)
+		}
+	}
+	return echo.NewHTTPError(http.StatusNotFound, "user not found")
 }
 
 func (s *Server) handleListItems(c echo.Context) error {
-	return c.JSON(http.StatusOK, []map[string]string{})
+	libID := c.QueryParam("library_id")
+	if libID == "" {
+		return echo.NewHTTPError(400, "library_id required")
+	}
+	items, err := s.db.ListItemsByLibrary(libID)
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusOK, items)
 }
 
 func (s *Server) handleGetItem(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"id": c.Param("id")})
+	id := c.Param("id")
+	item, err := s.db.GetItemByID(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+	return c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleListLibraries(c echo.Context) error {
-	return c.JSON(http.StatusOK, []map[string]string{})
+	libs, err := s.db.ListLibraries()
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusOK, libs)
 }
 
 func (s *Server) handleCreateLibrary(c echo.Context) error {

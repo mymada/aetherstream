@@ -1,0 +1,49 @@
+services:
+  aetherstream:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aetherstream
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "8097:8097"
+    volumes:
+      # Media library mount
+      - /media:/media
+      # Persistent SQLite database
+      - aetherstream-data:/data
+    environment:
+      # JWT secret (required — change in production!)
+      - AETHERSTREAM_AUTH_SECRET=${JWT_SECRET:-change-me-in-production}
+      # Optional: master key for secure store
+      - AETHERSTREAM_MASTER_KEY=${MASTER_KEY:-}
+      # Optional: SwiftFlow/TMDb integration
+      - AETHERSTREAM_SWIFTFLOW_KEY=${SWIFTFLOW_KEY:-}
+      - AETHERSTREAM_SWIFTFLOW_URL=${SWIFTFLOW_URL:-}
+      # Server config overrides
+      - AETHERSTREAM_SERVER_PORT=8080
+      - AETHERSTREAM_SERVER_HOST=0.0.0.0
+      # Database path inside container
+      - AETHERSTREAM_DATABASE_PATH=/data/aetherstream.db
+      # FFmpeg config
+      - AETHERSTREAM_FFMPEG_PATH=ffmpeg
+      - AETHERSTREAM_FFMPEG_PROBE_PATH=ffprobe
+      - AETHERSTREAM_FFMPEG_MAX_JOBS=4
+      - AETHERSTREAM_FFMPEG_HWACCEL=auto
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/system/info"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aetherstream-net
+
+volumes:
+  aetherstream-data:
+    driver: local
+
+networks:
+  aetherstream-net:
+    driver: bridge
