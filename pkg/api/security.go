@@ -81,7 +81,7 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			c.Response().Header().Set("X-Frame-Options", "DENY")
 			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
 			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:")
+			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:")
 			// Only send HSTS over HTTPS to avoid leaking the header on HTTP connections
 			if c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https" {
 				c.Response().Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
