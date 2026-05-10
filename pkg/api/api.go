@@ -193,16 +193,11 @@ func (s *Server) handleListUsers(c echo.Context) error {
 
 func (s *Server) handleGetUser(c echo.Context) error {
 	id := c.Param("id")
-	users, err := s.db.ListUsers()
+	user, err := s.db.GetUserByID(id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
 	}
-	for _, u := range users {
-		if uid, ok := u["id"].(string); ok && uid == id {
-			return c.JSON(http.StatusOK, u)
-		}
-	}
-	return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	return c.JSON(http.StatusOK, user)
 }
 
 func (s *Server) handleListItems(c echo.Context) error {
@@ -322,8 +317,7 @@ func (s *Server) handleListSubtitles(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
-	path, _ := item["path"].(string)
-	subs, err := probe.ExtractSubtitleTracks(path)
+	subs, err := probe.ExtractSubtitleTracks(item.Path)
 	if err != nil {
 		return c.JSON(http.StatusOK, []map[string]interface{}{})
 	}
@@ -337,15 +331,14 @@ func (s *Server) handleGetSubtitle(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
-	path, _ := item["path"].(string)
-	
+
 	// Validate subtitle language parameter (prevent path traversal)
 	if strings.Contains(lang, "..") || strings.Contains(lang, "/") || strings.Contains(lang, "\\") {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid language parameter")
 	}
-	
+
 	// Extract subtitle to temp file and serve
-	subPath, err := probe.ExtractSubtitleToFile(path, lang)
+	subPath, err := probe.ExtractSubtitleToFile(item.Path, lang)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "subtitle not found")
 	}
@@ -540,8 +533,7 @@ func (s *Server) handleGetThumbnail(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
 
-	path, ok := item["path"].(string)
-	if !ok || path == "" {
+	if item.Path == "" {
 		return echo.NewHTTPError(http.StatusNotFound, "no file path")
 	}
 
@@ -557,7 +549,7 @@ func (s *Server) handleGetThumbnail(c echo.Context) error {
 
 	// Generate on demand if missing
 	if !s.thumbSvc.Exists(itemID, t) {
-		_, _, err = s.thumbSvc.GenerateThumbnails(path, itemID)
+		_, _, err = s.thumbSvc.GenerateThumbnails(item.Path, itemID)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "thumbnail generation failed")
 		}

@@ -1,8 +1,10 @@
 package stream
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -71,4 +73,53 @@ func TestDirectStreamNotFound(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestTranscoderConcurrency(t *testing.T) {
+	dbConn, _ := db.New(":memory:")
+	defer dbConn.Close()
+	dbConn.Migrate()
+
+	tr := NewTranscoder(dbConn, "/tmp/media")
+
+	// Simulate concurrent calls to Transcode for the same item
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = tr.Transcode("item-1", []string{"mobile"})
+		}()
+	}
+	wg.Wait()
+
+	// Only one job should have been marked running; after completion jobs should be empty
+	tr.mu.RLock()
+	lenJobs := len(tr.jobs)
+	tr.mu.RUnlock()
+	assert.Equal(t, 0, lenJobs)
+}
+
+func TestTranscoderMultipleItems(t *testing.T) {
+	dbConn, _ := db.New(":memory:")
+	defer dbConn.Close()
+	dbConn.Migrate()
+
+	tr := NewTranscoder(dbConn, "/tmp/media")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			itemID := fmt.Sprintf("item-%d", idx)
+			_ = tr.Transcode(itemID, []string{"mobile"})
+		}(i)
+	}
+	wg.Wait()
+
+	tr.mu.RLock()
+	lenJobs := len(tr.jobs)
+	tr.mu.RUnlock()
+	assert.Equal(t, 0, lenJobs)
 }

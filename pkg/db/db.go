@@ -261,27 +261,40 @@ func (d *DB) GetUserByUsername(username string) (id, passwordHash, role string, 
 	return
 }
 
+// GetUserByID returns a single user by ID using a direct SQL query with LIMIT 1.
+func (d *DB) GetUserByID(id string) (map[string]interface{}, error) {
+	row := d.QueryRow("SELECT id, username, role, created_at FROM users WHERE id = ? LIMIT 1", id)
+	var uid, username, role string
+	var createdAt time.Time
+	if err := row.Scan(&uid, &username, &role, &createdAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
+	}
+	return map[string]interface{}{
+		"id":        uid,
+		"username":  username,
+		"role":      role,
+		"createdAt": createdAt,
+	}, nil
+}
+
 // ListUsers returns all users
-func (d *DB) ListUsers() ([]map[string]interface{}, error) {
+func (d *DB) ListUsers() ([]User, error) {
 	rows, err := d.Query("SELECT id, username, role, created_at FROM users")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var users []map[string]interface{}
+	var users []User
 	for rows.Next() {
-		var id, username, role string
-		var createdAt time.Time
-		if err := rows.Scan(&id, &username, &role, &createdAt); err != nil {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt); err != nil {
 			continue
 		}
-		users = append(users, map[string]interface{}{
-			"id":        id,
-			"username":  username,
-			"role":      role,
-			"createdAt": createdAt,
-		})
+		users = append(users, u)
 	}
 	return users, nil
 }
@@ -298,27 +311,20 @@ func (d *DB) CreateLibrary(id, name, path, mediaType string) error {
 }
 
 // ListLibraries returns all libraries
-func (d *DB) ListLibraries() ([]map[string]interface{}, error) {
+func (d *DB) ListLibraries() ([]Library, error) {
 	rows, err := d.Query("SELECT id, name, path, media_type, created_at FROM libraries")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var libs []map[string]interface{}
+	var libs []Library
 	for rows.Next() {
-		var id, name, path, mediaType string
-		var createdAt time.Time
-		if err := rows.Scan(&id, &name, &path, &mediaType, &createdAt); err != nil {
+		var l Library
+		if err := rows.Scan(&l.ID, &l.Name, &l.Path, &l.MediaType, &l.CreatedAt); err != nil {
 			continue
 		}
-		libs = append(libs, map[string]interface{}{
-			"id":         id,
-			"name":       name,
-			"path":       path,
-			"mediaType":  mediaType,
-			"createdAt":  createdAt,
-		})
+		libs = append(libs, l)
 	}
 	return libs, nil
 }
@@ -336,41 +342,22 @@ func (d *DB) CreateItem(id, libraryID, path, name, mediaType, container string, 
 }
 
 // GetItemByID fetches single item
-func (d *DB) GetItemByID(id string) (map[string]interface{}, error) {
+func (d *DB) GetItemByID(id string) (*Item, error) {
 	row := d.QueryRow(
 		`SELECT id, library_id, path, name, media_type, container, size_bytes, duration_seconds, width, height, video_codec, audio_codec, created_at
 		 FROM items WHERE id = ?`, id)
-	
-	var itemID, libID, path, name, mediaType, container, videoCodec, audioCodec string
-	var sizeBytes int64
-	var duration float64
-	var width, height int
-	var createdAt time.Time
-	
-	err := row.Scan(&itemID, &libID, &path, &name, &mediaType, &container, &sizeBytes, &duration, &width, &height, &videoCodec, &audioCodec, &createdAt)
+
+	var it Item
+	err := row.Scan(&it.ID, &it.LibraryID, &it.Path, &it.Name, &it.MediaType, &it.Container,
+		&it.SizeBytes, &it.DurationSeconds, &it.Width, &it.Height, &it.VideoCodec, &it.AudioCodec, &it.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	
-	return map[string]interface{}{
-		"id":             itemID,
-		"libraryId":      libID,
-		"path":           path,
-		"name":           name,
-		"mediaType":      mediaType,
-		"container":      container,
-		"sizeBytes":      sizeBytes,
-		"durationSeconds": duration,
-		"width":          width,
-		"height":         height,
-		"videoCodec":     videoCodec,
-		"audioCodec":     audioCodec,
-		"createdAt":      createdAt,
-	}, nil
+	return &it, nil
 }
 
 // ListItemsByLibrary returns items in a library
-func (d *DB) ListItemsByLibrary(libraryID string) ([]map[string]interface{}, error) {
+func (d *DB) ListItemsByLibrary(libraryID string) ([]Item, error) {
 	rows, err := d.Query(
 		`SELECT id, library_id, path, name, media_type, container, size_bytes, duration_seconds, width, height, video_codec, audio_codec, created_at
 		 FROM items WHERE library_id = ?`, libraryID)
@@ -379,32 +366,14 @@ func (d *DB) ListItemsByLibrary(libraryID string) ([]map[string]interface{}, err
 	}
 	defer rows.Close()
 
-	var items []map[string]interface{}
+	var items []Item
 	for rows.Next() {
-		var itemID, libID, path, name, mediaType, container, videoCodec, audioCodec string
-		var sizeBytes int64
-		var duration float64
-		var width, height int
-		var createdAt time.Time
-		
-		if err := rows.Scan(&itemID, &libID, &path, &name, &mediaType, &container, &sizeBytes, &duration, &width, &height, &videoCodec, &audioCodec, &createdAt); err != nil {
+		var it Item
+		if err := rows.Scan(&it.ID, &it.LibraryID, &it.Path, &it.Name, &it.MediaType, &it.Container,
+			&it.SizeBytes, &it.DurationSeconds, &it.Width, &it.Height, &it.VideoCodec, &it.AudioCodec, &it.CreatedAt); err != nil {
 			continue
 		}
-		items = append(items, map[string]interface{}{
-			"id":             itemID,
-			"libraryId":      libID,
-			"path":           path,
-			"name":           name,
-			"mediaType":      mediaType,
-			"container":      container,
-			"sizeBytes":      sizeBytes,
-			"durationSeconds": duration,
-			"width":          width,
-			"height":         height,
-			"videoCodec":     videoCodec,
-			"audioCodec":     audioCodec,
-			"createdAt":      createdAt,
-		})
+		items = append(items, it)
 	}
 	return items, nil
 }
@@ -455,70 +424,54 @@ func (d *DB) CreateCollection(id, userID, name, colType string) error {
 }
 
 // ListCollections returns collections for a user
-func (d *DB) ListCollections(userID string) ([]map[string]interface{}, error) {
+func (d *DB) ListCollections(userID string) ([]Collection, error) {
 	rows, err := d.Query("SELECT id, name, collection_type, created_at FROM collections WHERE user_id = ?", userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var cols []map[string]interface{}
+	var cols []Collection
 	for rows.Next() {
-		var id, name, colType string
-		var createdAt time.Time
-		if err := rows.Scan(&id, &name, &colType, &createdAt); err != nil {
+		var c Collection
+		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.CreatedAt); err != nil {
 			continue
 		}
-		cols = append(cols, map[string]interface{}{
-			"id":   id,
-			"name": name,
-			"type": colType,
-			"createdAt": createdAt,
-		})
+		cols = append(cols, c)
 	}
 	return cols, nil
 }
 
 // GetCollectionWithItems returns collection + items
-func (d *DB) GetCollectionWithItems(colID string) (map[string]interface{}, []map[string]interface{}, error) {
+func (d *DB) GetCollectionWithItems(colID string) (*Collection, []Item, error) {
 	row := d.QueryRow("SELECT id, user_id, name, collection_type, created_at FROM collections WHERE id = ?", colID)
-	var id, userID, name, colType string
-	var createdAt time.Time
-	if err := row.Scan(&id, &userID, &name, &colType, &createdAt); err != nil {
+	var col Collection
+	if err := row.Scan(&col.ID, &col.UserID, &col.Name, &col.Type, &col.CreatedAt); err != nil {
 		return nil, nil, err
-	}
-	col := map[string]interface{}{
-		"id":   id,
-		"userId": userID,
-		"name": name,
-		"type": colType,
-		"createdAt": createdAt,
 	}
 
 	rows, err := d.Query(`
-		SELECT i.id, i.name, i.media_type, i.path
+		SELECT i.id, i.library_id, i.path, i.name, i.media_type, i.container,
+			i.size_bytes, i.duration_seconds, i.width, i.height,
+			i.video_codec, i.audio_codec, i.created_at
 		FROM items i
 		JOIN collection_items ci ON i.id = ci.item_id
 		WHERE ci.collection_id = ?`, colID)
 	if err != nil {
-		return col, nil, err
+		return &col, nil, err
 	}
 	defer rows.Close()
 
-	var items []map[string]interface{}
+	var items []Item
 	for rows.Next() {
-		var itemID, itemName, mediaType, path string
-		if err := rows.Scan(&itemID, &itemName, &mediaType, &path); err != nil {
+		var it Item
+		if err := rows.Scan(&it.ID, &it.LibraryID, &it.Path, &it.Name, &it.MediaType, &it.Container,
+			&it.SizeBytes, &it.DurationSeconds, &it.Width, &it.Height, &it.VideoCodec, &it.AudioCodec, &it.CreatedAt); err != nil {
 			continue
 		}
-		items = append(items, map[string]interface{}{
-			"id":       itemID,
-			"name":     itemName,
-			"mediaType": mediaType,
-			"path":     path,
-		})
+		items = append(items, it)
 	}
-	return col, items, nil
+	return &col, items, nil
 }
 
 // AddItemToCollection adds item to collection
@@ -551,7 +504,7 @@ func (d *DB) LogActivity(userID, action, details string) error {
 }
 
 // ListActivity returns recent activity
-func (d *DB) ListActivity(limit int) ([]map[string]interface{}, error) {
+func (d *DB) ListActivity(limit int) ([]Activity, error) {
 	rows, err := d.Query(
 		"SELECT id, user_id, action, details, created_at FROM activity_log ORDER BY created_at DESC LIMIT ?",
 		limit,
@@ -561,21 +514,13 @@ func (d *DB) ListActivity(limit int) ([]map[string]interface{}, error) {
 	}
 	defer rows.Close()
 
-	var acts []map[string]interface{}
+	var acts []Activity
 	for rows.Next() {
-		var id int
-		var userID, action, details string
-		var createdAt time.Time
-		if err := rows.Scan(&id, &userID, &action, &details, &createdAt); err != nil {
+		var a Activity
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Action, &a.Details, &a.CreatedAt); err != nil {
 			continue
 		}
-		acts = append(acts, map[string]interface{}{
-			"id":        id,
-			"userId":    userID,
-			"action":    action,
-			"details":   details,
-			"createdAt": createdAt,
-		})
+		acts = append(acts, a)
 	}
 	return acts, nil
 }
@@ -604,12 +549,12 @@ func (d *DB) DeleteFTSIndex(itemID string) error {
 
 // SearchItemsFTS performs full-text search across title, description, actors, director.
 // mediaType filters by items.media_type if non-empty. limit caps results (default 20).
-func (d *DB) SearchItemsFTS(query, mediaType string, limit int) ([]map[string]interface{}, error) {
+func (d *DB) SearchItemsFTS(query, mediaType string, limit int) ([]Item, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	if query == "" {
-		return []map[string]interface{}{}, nil
+		return []Item{}, nil
 	}
 
 	var rows *sql.Rows
@@ -663,32 +608,14 @@ func (d *DB) SearchItemsFTS(query, mediaType string, limit int) ([]map[string]in
 	}
 	defer rows.Close()
 
-	var items []map[string]interface{}
+	var items []Item
 	for rows.Next() {
-		var itemID, libID, path, name, mediaTypeResult, container, videoCodec, audioCodec string
-		var sizeBytes int64
-		var duration float64
-		var width, height int
-		var createdAt time.Time
-		if err := rows.Scan(&itemID, &libID, &path, &name, &mediaTypeResult, &container,
-			&sizeBytes, &duration, &width, &height, &videoCodec, &audioCodec, &createdAt); err != nil {
+		var it Item
+		if err := rows.Scan(&it.ID, &it.LibraryID, &it.Path, &it.Name, &it.MediaType, &it.Container,
+			&it.SizeBytes, &it.DurationSeconds, &it.Width, &it.Height, &it.VideoCodec, &it.AudioCodec, &it.CreatedAt); err != nil {
 			continue
 		}
-		items = append(items, map[string]interface{}{
-			"id":             itemID,
-			"libraryId":      libID,
-			"path":           path,
-			"name":           name,
-			"mediaType":      mediaTypeResult,
-			"container":      container,
-			"sizeBytes":      sizeBytes,
-			"durationSeconds": duration,
-			"width":          width,
-			"height":         height,
-			"videoCodec":     videoCodec,
-			"audioCodec":     audioCodec,
-			"createdAt":      createdAt,
-		})
+		items = append(items, it)
 	}
 	return items, nil
 }

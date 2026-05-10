@@ -76,10 +76,9 @@ func (m *Manager) ScanLibrary(libraryID string) error {
 	}
 
 	for _, lib := range libs {
-		if lib["id"] == libraryID {
-			path, _ := lib["path"].(string)
+		if lib.ID == libraryID {
 			select {
-			case m.scanQueue <- scanJob{libraryID: libraryID, path: path}:
+			case m.scanQueue <- scanJob{libraryID: libraryID, path: lib.Path}:
 			default:
 				return fmt.Errorf("scan queue full")
 			}

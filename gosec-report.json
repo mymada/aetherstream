@@ -2,8 +2,8 @@
 	"Golang errors": {},
 	"Issues": [],
 	"Stats": {
-		"files": 56,
-		"lines": 11239,
+		"files": 57,
+		"lines": 11207,
 		"nosec": 21,
 		"found": 0
 	},

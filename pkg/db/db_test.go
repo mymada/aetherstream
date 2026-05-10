@@ -83,7 +83,7 @@ func TestDB_CollectionCRUD(t *testing.T) {
 	// Get with items (empty)
 	col, items, err := db.GetCollectionWithItems("c1")
 	require.NoError(t, err)
-	assert.Equal(t, "Favorites", col["name"])
+	assert.Equal(t, "Favorites", col.Name)
 	assert.Len(t, items, 0)
 }
 
@@ -99,7 +99,7 @@ func TestDB_ActivityLog(t *testing.T) {
 	acts, err := db.ListActivity(10)
 	require.NoError(t, err)
 	assert.Len(t, acts, 1)
-	assert.Equal(t, "login", acts[0]["action"])
+	assert.Equal(t, "login", acts[0].Action)
 }
 
 func TestDB_LibraryCRUD(t *testing.T) {
@@ -114,7 +114,7 @@ func TestDB_LibraryCRUD(t *testing.T) {
 	libs, err := db.ListLibraries()
 	require.NoError(t, err)
 	assert.Len(t, libs, 1)
-	assert.Equal(t, "Movies", libs[0]["name"])
+	assert.Equal(t, "Movies", libs[0].Name)
 }
 
 func TestDB_ItemCRUD(t *testing.T) {
@@ -130,7 +130,7 @@ func TestDB_ItemCRUD(t *testing.T) {
 
 	item, err := db.GetItemByID("i1")
 	require.NoError(t, err)
-	assert.Equal(t, "test", item["name"])
+	assert.Equal(t, "test", item.Name)
 
 	items, err := db.ListItemsByLibrary("l1")
 	require.NoError(t, err)

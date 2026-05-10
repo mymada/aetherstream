@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/devuser/aetherstream/pkg/encoder"
@@ -53,8 +54,8 @@ func (s *Server) handleDirectStream(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
 
-	path, ok := item["path"].(string)
-	if !ok || path == "" {
+	path := item.Path
+	if path == "" {
 		return echo.NewHTTPError(http.StatusNotFound, "no file path")
 	}
 
@@ -151,8 +152,8 @@ func (s *Server) handleProbe(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
 
-	path, ok := item["path"].(string)
-	if !ok || path == "" {
+	path := item.Path
+	if path == "" {
 		return echo.NewHTTPError(http.StatusNotFound, "no file path")
 	}
 
@@ -185,6 +186,7 @@ type Transcoder struct {
 	db        *db.DB
 	mediaRoot string
 	jobs      map[string]bool
+	mu        sync.RWMutex
 }
 
 // NewTranscoder creates a transcoder
@@ -199,7 +201,10 @@ func NewTranscoder(database *db.DB, mediaRoot string) *Transcoder {
 // Transcode starts background transcode for given profiles
 func (t *Transcoder) Transcode(itemID string, profiles []string) error {
 	// Check if already running
-	if t.jobs[itemID] {
+	t.mu.RLock()
+	running := t.jobs[itemID]
+	t.mu.RUnlock()
+	if running {
 		return fmt.Errorf("transcode already in progress")
 	}
 
@@ -208,15 +213,21 @@ func (t *Transcoder) Transcode(itemID string, profiles []string) error {
 		return err
 	}
 
-	inputPath, _ := item["path"].(string)
+	inputPath := item.Path
 	if inputPath == "" {
 		return fmt.Errorf("no input path")
 	}
 
+	t.mu.Lock()
 	t.jobs[itemID] = true
+	t.mu.Unlock()
 
 	go func() {
-		defer delete(t.jobs, itemID)
+		defer func() {
+			t.mu.Lock()
+			delete(t.jobs, itemID)
+			t.mu.Unlock()
+		}()
 
 		for _, profileName := range profiles {
 			profile := encoder.GetProfileByName(profileName)

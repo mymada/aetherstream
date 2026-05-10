@@ -29,31 +29,31 @@ func TestSearcher_SearchItems(t *testing.T) {
 	results, err := searcher.SearchItems("Terminus", "", 10)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "i1", results[0]["id"])
+	assert.Equal(t, "i1", results[0].ID)
 
 	// Search by description
 	results, err = searcher.SearchItems("beginning", "", 10)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "i2", results[0]["id"])
+	assert.Equal(t, "i2", results[0].ID)
 
 	// Search by actor
 	results, err = searcher.SearchItems("Alice", "", 10)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "i1", results[0]["id"])
+	assert.Equal(t, "i1", results[0].ID)
 
 	// Search by director
 	results, err = searcher.SearchItems("Director Y", "", 10)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "i2", results[0]["id"])
+	assert.Equal(t, "i2", results[0].ID)
 
 	// Filter by mediaType
 	results, err = searcher.SearchItems("Alpha", "movie", 10)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "i2", results[0]["id"])
+	assert.Equal(t, "i2", results[0].ID)
 
 	// No match
 	results, err = searcher.SearchItems("nonexistent", "", 10)

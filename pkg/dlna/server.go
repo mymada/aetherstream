@@ -542,14 +542,12 @@ func (s *Server) buildBrowseResult(objectID, browseFlag string, startIndex, coun
 		}
 
 		for _, lib := range libs {
-			id, _ := lib["id"].(string)
-			name, _ := lib["name"].(string)
 			didl.Containers = append(didl.Containers, didlContainer{
-				ID:         id,
+				ID:         lib.ID,
 				ParentID:   "0",
 				Restricted: 1,
 				ChildCount: 0, // Will be populated if needed
-				Title:      name,
+				Title:      lib.Name,
 				Class:      "object.container.storageFolder",
 			})
 		}
@@ -561,49 +559,37 @@ func (s *Server) buildBrowseResult(objectID, browseFlag string, startIndex, coun
 		}
 
 		for _, item := range items {
-			itemID, _ := item["id"].(string)
-			name, _ := item["name"].(string)
-			mediaType, _ := item["mediaType"].(string)
-			itemPath, _ := item["path"].(string)
-			sizeBytes, _ := item["sizeBytes"].(int64)
-			duration, _ := item["durationSeconds"].(float64)
-			width, _ := item["width"].(int)
-			height, _ := item["height"].(int)
-			container, _ := item["container"].(string)
-
 			upnpClass := "object.item.videoItem"
-			if mediaType == "audio" {
+			if item.MediaType == "audio" {
 				upnpClass = "object.item.audioItem"
-			} else if mediaType == "image" {
+			} else if item.MediaType == "image" {
 				upnpClass = "object.item.imageItem"
 			}
 
 			res := &didlRes{
-				ProtocolInfo: fmt.Sprintf("http-get:*:video/%s:*", container),
-				Size:         sizeBytes,
-				Value:        fmt.Sprintf("http://%s:%d/content/%s", s.httpHost, s.httpPort, itemID),
+				ProtocolInfo: fmt.Sprintf("http-get:*:video/%s:*", item.Container),
+				Size:         item.SizeBytes,
+				Value:        fmt.Sprintf("http://%s:%d/content/%s", s.httpHost, s.httpPort, item.ID),
 			}
-			if duration > 0 {
-				res.Duration = formatDuration(duration)
+			if item.DurationSeconds > 0 {
+				res.Duration = formatDuration(item.DurationSeconds)
 			}
-			if width > 0 && height > 0 {
-				res.Resolution = fmt.Sprintf("%dx%d", width, height)
+			if item.Width > 0 && item.Height > 0 {
+				res.Resolution = fmt.Sprintf("%dx%d", item.Width, item.Height)
 			}
 
 			// Adjust protocol info for audio/image
-			if mediaType == "audio" {
-				res.ProtocolInfo = fmt.Sprintf("http-get:*:audio/%s:*", container)
-			} else if mediaType == "image" {
-				res.ProtocolInfo = fmt.Sprintf("http-get:*:image/%s:*", container)
+			if item.MediaType == "audio" {
+				res.ProtocolInfo = fmt.Sprintf("http-get:*:audio/%s:*", item.Container)
+			} else if item.MediaType == "image" {
+				res.ProtocolInfo = fmt.Sprintf("http-get:*:image/%s:*", item.Container)
 			}
 
-			_ = itemPath // may be used later for direct file protocol info
-
 			didl.Items = append(didl.Items, didlItem{
-				ID:         itemID,
+				ID:         item.ID,
 				ParentID:   objectID,
 				Restricted: 1,
-				Title:      name,
+				Title:      item.Name,
 				Class:      upnpClass,
 				Res:        res,
 			})
@@ -734,9 +720,8 @@ func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Serve file with appropriate content type
-	container, _ := item["container"].(string)
 	contentType := "application/octet-stream"
-	switch container {
+	switch item.Container {
 	case "mp4":
 		contentType = "video/mp4"
 	case "mkv":
@@ -754,10 +739,9 @@ func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", item["name"]))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", item.Name))
 	w.Header().Set("Accept-Ranges", "bytes")
-	itemPath, ok := item["path"].(string)
-	if !ok || itemPath == "" {
+	if item.Path == "" {
 		http.Error(w, "invalid item path", http.StatusInternalServerError)
 		return
 	}
@@ -766,12 +750,12 @@ func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 	if len(mediaDirs) == 0 {
 		mediaDirs = []string{"./media"} // default media directory
 	}
-	if !isPathInMediaDirs(itemPath, mediaDirs) {
+	if !isPathInMediaDirs(item.Path, mediaDirs) {
 		http.Error(w, "path not in media directories", http.StatusForbidden)
 		return
 	}
 	// #nosec G703 - path validated above by isPathInMediaDirs
-	http.ServeFile(w, r, itemPath)
+	http.ServeFile(w, r, item.Path)
 }
 
 // isPathInMediaDirs checks if a path is within any of the allowed media directories

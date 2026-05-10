@@ -33,8 +33,8 @@ func (s *AdaptiveProfileSelector) SelectProfile(itemID string, bandwidthKbps int
 		return encoder.Profile{}, err
 	}
 
-	srcWidth, _ := item["width"].(int)
-	srcHeight, _ := item["height"].(int)
+	srcWidth := item.Width
+	srcHeight := item.Height
 
 	// Device-specific overrides
 	switch deviceType {
