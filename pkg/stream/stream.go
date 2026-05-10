@@ -31,13 +31,17 @@ func NewServer(database *db.DB, mediaRoot string) *Server {
 	}
 }
 
-// RegisterRoutes sets up streaming routes
-func (s *Server) RegisterRoutes(e *echo.Echo) {
-	e.GET("/videos/:id/stream", s.handleDirectStream)
-	e.GET("/videos/:id/hls/master.m3u8", s.handleHLSMaster)
-	e.GET("/videos/:id/hls/:profile/playlist.m3u8", s.handleHLSVariant)
-	e.GET("/videos/:id/hls/:profile/:segment", s.handleHLSSegment)
-	e.GET("/videos/:id/probe", s.handleProbe)
+	// RegisterRoutes sets up streaming routes (protected by auth middleware)
+func (s *Server) RegisterRoutes(e *echo.Echo, authMiddleware echo.MiddlewareFunc) {
+	g := e.Group("/videos")
+	if authMiddleware != nil {
+		g.Use(authMiddleware)
+	}
+	g.GET("/:id/stream", s.handleDirectStream)
+	g.GET("/:id/hls/master.m3u8", s.handleHLSMaster)
+	g.GET("/:id/hls/:profile/playlist.m3u8", s.handleHLSVariant)
+	g.GET("/:id/hls/:profile/:segment", s.handleHLSSegment)
+	g.GET("/:id/probe", s.handleProbe)
 }
 
 // handleDirectStream serves the original file (direct play)
@@ -217,7 +221,7 @@ func (t *Transcoder) Transcode(itemID string, profiles []string) error {
 		for _, profileName := range profiles {
 			profile := encoder.GetProfileByName(profileName)
 			outputDir := filepath.Join(t.mediaRoot, "transcodes", itemID, profileName)
-			os.MkdirAll(outputDir, 0755)
+			os.MkdirAll(outputDir, 0750)
 
 			// Build FFmpeg HLS command
 			args := encoder.BuildHLSCommand(inputPath, outputDir, profile, 4, "none")

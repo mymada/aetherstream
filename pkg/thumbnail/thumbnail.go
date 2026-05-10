@@ -76,7 +76,7 @@ func (s *Service) Exists(itemID string, t ThumbnailType) bool {
 func (s *Service) extract(videoPath, itemID string, t ThumbnailType, offset time.Duration) (string, error) {
 	outPath := s.Path(itemID, t)
 
-	if err := os.MkdirAll(s.outputDir, 0755); err != nil {
+	if err := os.MkdirAll(s.outputDir, 0750); err != nil {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
 

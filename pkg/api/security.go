@@ -82,7 +82,10 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
 			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self' ws: wss:")
-			c.Response().Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			// Only send HSTS over HTTPS to avoid leaking the header on HTTP connections
+			if c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https" {
+				c.Response().Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			}
 			c.Response().Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
 			return next(c)
 		}
@@ -231,7 +234,7 @@ func BruteForceProtection() echo.MiddlewareFunc {
 			if !strings.Contains(path, "/login") && !strings.Contains(path, "/auth") {
 				return next(c)
 			}
-			ip := c.RealIP()
+			ip := getTrustedIP(c)
 			ipKey := "ip:" + ip
 			if !globalBruteForce.allowed(ipKey) {
 				return echo.NewHTTPError(http.StatusTooManyRequests, "too many failed attempts from this IP")
@@ -269,6 +272,14 @@ func ResetBruteForce(ip, username string) {
 	}
 }
 
+// getTrustedIP returns the client IP, preferring RemoteAddr when not behind a trusted proxy.
+func getTrustedIP(c echo.Context) string {
+	// If the server is directly exposed, avoid trusting X-Forwarded-For to prevent spoofing.
+	// Use RemoteAddr directly when no trusted proxy is configured.
+	// In a reverse-proxy setup, configure Echo's ExtractIPFromXFFHeader instead.
+	return c.Request().RemoteAddr
+}
+
 // --- Session Timeout / Idle Logout ---
 
 const sessionContextKey = "session_last_activity"
@@ -279,7 +290,7 @@ const sessionTimeoutHeader = "X-Session-Timeout"
 func SessionTimeout(idleDuration time.Duration) echo.MiddlewareFunc {
 	sessions := make(map[string]time.Time)
 	var mu sync.RWMutex
-	
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Get user ID from auth context
@@ -287,22 +298,22 @@ func SessionTimeout(idleDuration time.Duration) echo.MiddlewareFunc {
 			if claims == nil {
 				return next(c) // No auth, skip timeout
 			}
-			
+
 			userID := claims.UserID
 			now := time.Now()
-			
+
 			mu.RLock()
 			last, ok := sessions[userID]
 			mu.RUnlock()
-			
+
 			if ok && now.Sub(last) > idleDuration {
 				return echo.NewHTTPError(http.StatusUnauthorized, "session expired due to inactivity")
 			}
-			
+
 			mu.Lock()
 			sessions[userID] = now
 			mu.Unlock()
-			
+
 			// Inform client how many seconds remain
 			remaining := int(idleDuration.Seconds())
 			c.Response().Header().Set(sessionTimeoutHeader, fmt.Sprintf("%d", remaining))
@@ -386,7 +397,7 @@ func RateLimitByIP(requestsPerMin int) echo.MiddlewareFunc {
 	limiter := newIPRateLimiter(float64(requestsPerMin), float64(requestsPerMin))
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			ip := c.RealIP()
+			ip := getTrustedIP(c)
 			if !limiter.allow(ip) {
 				return echo.NewHTTPError(http.StatusTooManyRequests, "rate limit exceeded")
 			}
@@ -410,7 +421,7 @@ func AuditMiddleware(logFn AuditLogFunc) echo.MiddlewareFunc {
 			if logFn == nil {
 				return err
 			}
-			ip := c.RealIP()
+			ip := getTrustedIP(c)
 			path := c.Request().URL.Path
 			method := c.Request().Method
 			ua := c.Request().UserAgent()

@@ -80,7 +80,7 @@ type SubtitleStream struct {
 
 // WriteMovieNFO serializes a Movie struct to an .nfo file.
 func WriteMovieNFO(path string, movie *Movie) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
 	out, err := xml.MarshalIndent(movie, "", "  ")
@@ -88,7 +88,7 @@ func WriteMovieNFO(path string, movie *Movie) error {
 		return fmt.Errorf("marshal nfo: %w", err)
 	}
 	header := []byte(xml.Header + string(out) + "\n")
-	return os.WriteFile(path, header, 0644)
+	return os.WriteFile(path, header, 0600)
 }
 
 // ReadMovieNFO parses a movie .nfo file.
@@ -113,7 +113,7 @@ func NFOPath(mediaPath string) string {
 
 // WriteEpisodeNFO serializes an Episode struct to an .nfo file.
 func WriteEpisodeNFO(path string, ep *Episode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
 	out, err := xml.MarshalIndent(ep, "", "  ")
@@ -121,7 +121,7 @@ func WriteEpisodeNFO(path string, ep *Episode) error {
 		return fmt.Errorf("marshal nfo: %w", err)
 	}
 	header := []byte(xml.Header + string(out) + "\n")
-	return os.WriteFile(path, header, 0644)
+	return os.WriteFile(path, header, 0600)
 }
 
 // ReadEpisodeNFO parses an episode .nfo file.

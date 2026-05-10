@@ -4,12 +4,15 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+
+	"golang.org/x/crypto/pbkdf2"
 )
 
 // Store handles AES-256-GCM encryption of secrets
@@ -17,23 +20,23 @@ type Store struct {
 	key []byte
 }
 
-// NewStore creates a secure store from a 32-byte key (env or derived)
-func NewStore(key string) (*Store, error) {
-	if len(key) < 32 {
-		return nil, errors.New("securestore key must be at least 32 characters")
+// NewStore creates a secure store from a password string, deriving a 32-byte key via PBKDF2.
+func NewStore(password string) (*Store, error) {
+	if len(password) < 8 {
+		return nil, errors.New("securestore password must be at least 8 characters")
 	}
-	// Use first 32 bytes as AES-256 key
-	k := []byte(key)[:32]
-	return &Store{key: k}, nil
+	salt := []byte("aetherstream-static-salt-v1")
+	key := pbkdf2.Key([]byte(password), salt, 100000, 32, sha256.New)
+	return &Store{key: key}, nil
 }
 
-// NewStoreFromEnv creates store from environment variable
+// NewStoreFromEnv creates store from environment variable, deriving key via PBKDF2.
 func NewStoreFromEnv(envVar string) (*Store, error) {
-	key := os.Getenv(envVar)
-	if key == "" {
+	password := os.Getenv(envVar)
+	if password == "" {
 		return nil, fmt.Errorf("environment variable %s not set", envVar)
 	}
-	return NewStore(key)
+	return NewStore(password)
 }
 
 // Encrypt encrypts plaintext with AES-256-GCM, returns base64 ciphertext

@@ -2,7 +2,6 @@ package apikeys
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Key represents an API key
@@ -121,7 +121,7 @@ func (s *Store) Validate(rawKey string) (*Key, error) {
 	if k.RevokedAt != nil {
 		return nil, fmt.Errorf("key revoked")
 	}
-	if k.Hash != hashKey(rawKey) {
+	if !checkKey(rawKey, k.Hash) {
 		return nil, fmt.Errorf("invalid key")
 	}
 	if scopesStr != "" {
@@ -174,6 +174,10 @@ func HasScope(key *Key, scope string) bool {
 }
 
 func hashKey(raw string) string {
-	h := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(h[:])
+	h, _ := bcrypt.GenerateFromPassword([]byte(raw), bcrypt.DefaultCost)
+	return string(h)
+}
+
+func checkKey(raw, hash string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(raw)) == nil
 }

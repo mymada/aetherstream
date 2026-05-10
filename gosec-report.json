@@ -40,106 +40,10 @@
 				"id": "276",
 				"url": "https://cwe.mitre.org/data/definitions/276.html"
 			},
-			"rule_id": "G301",
-			"details": "Expect directory permissions to be 0750 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/trickplay/trickplay.go",
-			"code": "46: func (s *Service) Generate(videoPath, itemID string, durationSeconds float64) ([]string, error) {\n47: \tif err := os.MkdirAll(s.outputDir, 0755); err != nil {\n48: \t\treturn nil, fmt.Errorf(\"mkdir: %w\", err)\n",
-			"line": "47",
-			"column": "12",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G301",
-			"details": "Expect directory permissions to be 0750 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/thumbnail/thumbnail.go",
-			"code": "78: \n79: \tif err := os.MkdirAll(s.outputDir, 0755); err != nil {\n80: \t\treturn \"\", fmt.Errorf(\"mkdir: %w\", err)\n",
-			"line": "79",
-			"column": "12",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G301",
-			"details": "Expect directory permissions to be 0750 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/stream/stream.go",
-			"code": "219: \t\t\toutputDir := filepath.Join(t.mediaRoot, \"transcodes\", itemID, profileName)\n220: \t\t\tos.MkdirAll(outputDir, 0755)\n221: \n",
-			"line": "220",
-			"column": "4",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G301",
-			"details": "Expect directory permissions to be 0750 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
-			"code": "115: func WriteEpisodeNFO(path string, ep *Episode) error {\n116: \tif err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {\n117: \t\treturn fmt.Errorf(\"mkdir: %w\", err)\n",
-			"line": "116",
-			"column": "12",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G301",
-			"details": "Expect directory permissions to be 0750 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
-			"code": "82: func WriteMovieNFO(path string, movie *Movie) error {\n83: \tif err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {\n84: \t\treturn fmt.Errorf(\"mkdir: %w\", err)\n",
-			"line": "83",
-			"column": "12",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G301",
-			"details": "Expect directory permissions to be 0750 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
-			"code": "329: func NewTimeshiftBuffer(dir string, maxSegments int) *TimeshiftBuffer {\n330: \tos.MkdirAll(dir, 0755)\n331: \treturn \u0026TimeshiftBuffer{\n",
-			"line": "330",
-			"column": "2",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
 			"rule_id": "G306",
 			"details": "Expect WriteFile permissions to be 0600 or less",
 			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
-			"code": "123: \theader := []byte(xml.Header + string(out) + \"\\n\")\n124: \treturn os.WriteFile(path, header, 0644)\n125: }\n",
+			"code": "123: \theader := []byte(xml.Header + string(out) + \"\\n\")\n124: \treturn os.WriteFile(path, header, 0640)\n125: }\n",
 			"line": "124",
 			"column": "9",
 			"nosec": false,
@@ -155,7 +59,7 @@
 			"rule_id": "G306",
 			"details": "Expect WriteFile permissions to be 0600 or less",
 			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
-			"code": "90: \theader := []byte(xml.Header + string(out) + \"\\n\")\n91: \treturn os.WriteFile(path, header, 0644)\n92: }\n",
+			"code": "90: \theader := []byte(xml.Header + string(out) + \"\\n\")\n91: \treturn os.WriteFile(path, header, 0640)\n92: }\n",
 			"line": "91",
 			"column": "9",
 			"nosec": false,
@@ -299,8 +203,8 @@
 			"rule_id": "G104",
 			"details": "Errors unhandled",
 			"file": "/home/devuser/dev/aetherstream/pkg/stream/stream.go",
-			"code": "219: \t\t\toutputDir := filepath.Join(t.mediaRoot, \"transcodes\", itemID, profileName)\n220: \t\t\tos.MkdirAll(outputDir, 0755)\n221: \n",
-			"line": "220",
+			"code": "223: \t\t\toutputDir := filepath.Join(t.mediaRoot, \"transcodes\", itemID, profileName)\n224: \t\t\tos.MkdirAll(outputDir, 0750)\n225: \n",
+			"line": "224",
 			"column": "4",
 			"nosec": false,
 			"suppressions": null
@@ -379,7 +283,7 @@
 			"rule_id": "G104",
 			"details": "Errors unhandled",
 			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
-			"code": "329: func NewTimeshiftBuffer(dir string, maxSegments int) *TimeshiftBuffer {\n330: \tos.MkdirAll(dir, 0755)\n331: \treturn \u0026TimeshiftBuffer{\n",
+			"code": "329: func NewTimeshiftBuffer(dir string, maxSegments int) *TimeshiftBuffer {\n330: \tos.MkdirAll(dir, 0750)\n331: \treturn \u0026TimeshiftBuffer{\n",
 			"line": "330",
 			"column": "2",
 			"nosec": false,
@@ -836,9 +740,9 @@
 	],
 	"Stats": {
 		"files": 56,
-		"lines": 11148,
+		"lines": 11231,
 		"nosec": 21,
-		"found": 52
+		"found": 46
 	},
 	"GosecVersion": "dev"
 }

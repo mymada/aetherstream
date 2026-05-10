@@ -73,11 +73,13 @@ func (s *AdaptiveProfileSelector) SelectProfile(itemID string, bandwidthKbps int
 	}
 }
 
-// RegisterAdaptiveRoutes adds bandwidth-aware streaming endpoints
-func RegisterAdaptiveRoutes(e *echo.Echo, database *db.DB, mediaRoot string) {
+// RegisterAdaptiveRoutes adds bandwidth-aware streaming endpoints (protected by auth middleware)
+func RegisterAdaptiveRoutes(e *echo.Echo, database *db.DB, mediaRoot string, authMiddleware echo.MiddlewareFunc) {
 	selector := NewAdaptiveSelector(database)
 
-	e.GET("/videos/:id/adaptive.m3u8", func(c echo.Context) error {
+	g := e.Group("/videos")
+	g.Use(authMiddleware)
+	g.GET("/:id/adaptive.m3u8", func(c echo.Context) error {
 		itemID := c.Param("id")
 		bandwidthStr := c.QueryParam("bandwidth")
 		deviceType := c.QueryParam("device")
@@ -97,7 +99,7 @@ func RegisterAdaptiveRoutes(e *echo.Echo, database *db.DB, mediaRoot string) {
 	})
 
 	// Hardware acceleration auto-detect endpoint
-	e.GET("/system/hwaccel", func(c echo.Context) error {
+	g.GET("/system/hwaccel", func(c echo.Context) error {
 		hw := encoder.DetectHWAccel()
 		return c.JSON(http.StatusOK, map[string]string{
 			"hwaccel": hw,

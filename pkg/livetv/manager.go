@@ -327,7 +327,7 @@ type Segment struct {
 
 // NewTimeshiftBuffer creates a circular buffer
 func NewTimeshiftBuffer(dir string, maxSegments int) *TimeshiftBuffer {
-	os.MkdirAll(dir, 0755)
+	os.MkdirAll(dir, 0750)
 	return &TimeshiftBuffer{
 		segments: make([]Segment, 0, maxSegments),
 		maxSize:  maxSegments,

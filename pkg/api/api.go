@@ -63,6 +63,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.Use(BruteForceProtection())
 	e.Use(CORSMiddleware())
 
+
 	// Health / system
 	e.GET("/system/info", s.handleSystemInfo, RateLimitByIP(1000))
 	e.GET("/api/system/hardware", s.handleSystemHardware, RateLimitByIP(1000))
@@ -111,13 +112,13 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	// Dashboard / Activity
 	api.GET("/activity", s.handleListActivity)
 
-	// WebSocket realtime
-	e.GET("/ws", s.handleWebSocket)
+	// WebSocket realtime (protected)
+	e.GET("/ws", s.handleWebSocket, s.auth.Middleware())
 
-	// Stream routes
+	// Stream routes (protected)
 	streamSrv := stream.NewServer(s.db, "./media")
-	streamSrv.RegisterRoutes(e)
-	stream.RegisterAdaptiveRoutes(e, s.db, "./media")
+	streamSrv.RegisterRoutes(e, s.auth.Middleware())
+	stream.RegisterAdaptiveRoutes(e, s.db, "./media", s.auth.Middleware())
 
 	// Session info
 	api.GET("/session", s.handleGetSession)
@@ -142,10 +143,10 @@ func (s *Server) handleLogin(c echo.Context) error {
 		Password string `json:"password"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "invalid request")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 
-	ip := c.RealIP()
+	ip := getTrustedIP(c)
 
 	// Brute-force check already enforced by middleware; record on failure.
 	_, passwordHash, _, err := s.db.GetUserByUsername(req.Username)
@@ -161,7 +162,14 @@ func (s *Server) handleLogin(c echo.Context) error {
 
 	ResetBruteForce(ip, req.Username)
 
-	token, err := s.auth.GenerateToken("admin-1", req.Username, "admin")
+	// Use real user ID and role from database instead of hardcoded admin-1
+	userID, _, role, err := s.db.GetUserByUsername(req.Username)
+	if err != nil {
+		RecordFailedLogin(ip, req.Username)
+		return echo.NewHTTPError(401, "invalid credentials")
+	}
+
+	token, err := s.auth.GenerateToken(userID, req.Username, role)
 	if err != nil {
 		return echo.NewHTTPError(500, "token generation failed")
 	}
@@ -178,7 +186,7 @@ func (s *Server) handleAuthCallback(c echo.Context) error {
 func (s *Server) handleListUsers(c echo.Context) error {
 	users, err := s.db.ListUsers()
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusOK, users)
 }
@@ -187,7 +195,7 @@ func (s *Server) handleGetUser(c echo.Context) error {
 	id := c.Param("id")
 	users, err := s.db.ListUsers()
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	for _, u := range users {
 		if uid, ok := u["id"].(string); ok && uid == id {
@@ -200,11 +208,11 @@ func (s *Server) handleGetUser(c echo.Context) error {
 func (s *Server) handleListItems(c echo.Context) error {
 	libID := c.QueryParam("library_id")
 	if libID == "" {
-		return echo.NewHTTPError(400, "library_id required")
+		return echo.NewHTTPError(http.StatusBadRequest, "library_id required")
 	}
 	items, err := s.db.ListItemsByLibrary(libID)
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusOK, items)
 }
@@ -221,7 +229,7 @@ func (s *Server) handleGetItem(c echo.Context) error {
 func (s *Server) handleListLibraries(c echo.Context) error {
 	libs, err := s.db.ListLibraries()
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusOK, libs)
 }
@@ -233,16 +241,16 @@ func (s *Server) handleCreateLibrary(c echo.Context) error {
 		MediaType string `json:"media_type"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "invalid request")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 
 	if req.Name == "" || req.Path == "" {
-		return echo.NewHTTPError(400, "name and path required")
+		return echo.NewHTTPError(http.StatusBadRequest, "name and path required")
 	}
 
 	id, err := s.library.CreateLibrary(req.Name, req.Path, req.MediaType)
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 
 	return c.JSON(http.StatusCreated, map[string]string{
@@ -255,7 +263,7 @@ func (s *Server) handleCreateLibrary(c echo.Context) error {
 func (s *Server) handleScanLibrary(c echo.Context) error {
 	id := c.Param("id")
 	if err := s.library.ScanLibrary(id); err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "scanning", "library_id": id})
 }
@@ -271,7 +279,7 @@ func (s *Server) handleSwiftFlowWebhook(c echo.Context) error {
 		Token         string `json:"token"`
 	}
 	if err := c.Bind(&payload); err != nil {
-		return echo.NewHTTPError(400, "invalid payload")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
 
 	sessionID := payload.DeviceID + "-" + payload.UserID
@@ -359,10 +367,10 @@ func (s *Server) handleCreateUser(c echo.Context) error {
 		Role     string `json:"role"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "invalid request")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 	if req.Username == "" || req.Password == "" {
-		return echo.NewHTTPError(400, "username and password required")
+		return echo.NewHTTPError(http.StatusBadRequest, "username and password required")
 	}
 	if req.Role == "" {
 		req.Role = "user"
@@ -374,7 +382,7 @@ func (s *Server) handleCreateUser(c echo.Context) error {
 	}
 	id := uuid.New().String()
 	if err := s.db.CreateUser(id, req.Username, string(hash), req.Role); err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusCreated, map[string]string{"id": id, "username": req.Username, "role": req.Role})
 }
@@ -385,10 +393,10 @@ func (s *Server) handleUpdateUser(c echo.Context) error {
 		Role string `json:"role"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "invalid request")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 	if err := s.db.UpdateUserRole(id, req.Role); err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusOK, map[string]string{"id": id, "role": req.Role})
 }
@@ -396,7 +404,7 @@ func (s *Server) handleUpdateUser(c echo.Context) error {
 func (s *Server) handleDeleteUser(c echo.Context) error {
 	id := c.Param("id")
 	if err := s.db.DeleteUser(id); err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -410,7 +418,7 @@ func (s *Server) handleListCollections(c echo.Context) error {
 	}
 	cols, err := s.db.ListCollections(user.UserID)
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusOK, cols)
 }
@@ -425,17 +433,17 @@ func (s *Server) handleCreateCollection(c echo.Context) error {
 		Type string `json:"type"` // "collection" or "playlist"
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "invalid request")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(400, "name required")
+		return echo.NewHTTPError(http.StatusBadRequest, "name required")
 	}
 	if req.Type == "" {
 		req.Type = "collection"
 	}
 	id := uuid.New().String()
 	if err := s.db.CreateCollection(id, user.UserID, req.Name, req.Type); err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusCreated, map[string]string{"id": id, "name": req.Name, "type": req.Type})
 }
@@ -458,10 +466,10 @@ func (s *Server) handleAddToCollection(c echo.Context) error {
 		ItemID string `json:"item_id"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "invalid request")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 	if err := s.db.AddItemToCollection(colID, req.ItemID); err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -470,7 +478,7 @@ func (s *Server) handleRemoveFromCollection(c echo.Context) error {
 	colID := c.Param("id")
 	itemID := c.Param("item_id")
 	if err := s.db.RemoveItemFromCollection(colID, itemID); err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -480,7 +488,7 @@ func (s *Server) handleRemoveFromCollection(c echo.Context) error {
 func (s *Server) handleSearch(c echo.Context) error {
 	q := c.QueryParam("q")
 	if q == "" {
-		return echo.NewHTTPError(400, "query parameter 'q' required")
+		return echo.NewHTTPError(http.StatusBadRequest, "query parameter 'q' required")
 	}
 	mediaType := c.QueryParam("type")
 	limit := 20
@@ -489,9 +497,13 @@ func (s *Server) handleSearch(c echo.Context) error {
 			limit = 20
 		}
 	}
+	const maxLimit = 100
+	if limit > maxLimit {
+		limit = maxLimit
+	}
 	results, err := s.searcher.SearchItems(q, mediaType, limit)
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(500, "search failed")
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"query":   q,
@@ -506,7 +518,7 @@ func (s *Server) handleSearch(c echo.Context) error {
 func (s *Server) handleListActivity(c echo.Context) error {
 	acts, err := s.db.ListActivity(50)
 	if err != nil {
-		return echo.NewHTTPError(500, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.JSON(http.StatusOK, acts)
 }

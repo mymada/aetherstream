@@ -78,7 +78,8 @@ func TestSecurityHeaders(t *testing.T) {
 	assert.Equal(t, "DENY", h.Get("X-Frame-Options"))
 	assert.Equal(t, "strict-origin-when-cross-origin", h.Get("Referrer-Policy"))
 	assert.Contains(t, h.Get("Content-Security-Policy"), "default-src 'self'")
-	assert.Contains(t, h.Get("Strict-Transport-Security"), "max-age=63072000")
+	// HSTS is only sent on HTTPS; test request is HTTP so header should be absent
+	assert.Empty(t, h.Get("Strict-Transport-Security"))
 	assert.Contains(t, h.Get("Permissions-Policy"), "geolocation=()")
 }
 
@@ -115,8 +116,12 @@ func TestBruteForceProtection(t *testing.T) {
 		return c.String(http.StatusOK, "ok")
 	})
 
-	// First request allowed
+	// First request allowed (but now counts toward brute-force)
+	// Reset before the first request so it doesn't contribute to lockout
+	globalBruteForce.reset("ip:192.0.2.2")
+	globalBruteForce.reset("user:alice")
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+	req.RemoteAddr = "192.0.2.2:1234"
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -128,7 +133,7 @@ func TestBruteForceProtection(t *testing.T) {
 	}
 
 	req2 := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
-	req2.Header.Set("X-Forwarded-For", ip)
+	req2.RemoteAddr = ip + ":1234"
 	rec2 := httptest.NewRecorder()
 	e.ServeHTTP(rec2, req2)
 	// After 6 failed attempts, the IP should be blocked (429 Too Many Requests)

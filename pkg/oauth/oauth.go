@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -44,6 +45,7 @@ type Service struct {
 	cfg       Config
 	logger    zerolog.Logger
 	states    map[string]time.Time // state -> expiry
+	stateMu   sync.RWMutex
 	providers map[string]*oauth2.Config
 }
 
@@ -99,18 +101,21 @@ func (s *Service) GenerateState() string {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	state := base64.URLEncoding.EncodeToString(b)
+	s.stateMu.Lock()
 	s.states[state] = time.Now().Add(10 * time.Minute)
+	s.stateMu.Unlock()
 	return state
 }
 
 // ValidateState checks and consumes a state parameter
 func (s *Service) ValidateState(state string) bool {
+	s.stateMu.Lock()
 	expiry, ok := s.states[state]
-	if !ok {
-		return false
+	if ok {
+		delete(s.states, state)
 	}
-	delete(s.states, state)
-	return time.Now().Before(expiry)
+	s.stateMu.Unlock()
+	return ok && time.Now().Before(expiry)
 }
 
 // AuthURL returns the authorization URL for a provider

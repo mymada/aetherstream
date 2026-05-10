@@ -44,7 +44,7 @@ func (s *Service) SetWidth(w int) {
 // Generate creates preview images for a video at the configured interval.
 // Images are written as {itemID}_thumb_%04d.jpg in the output directory.
 func (s *Service) Generate(videoPath, itemID string, durationSeconds float64) ([]string, error) {
-	if err := os.MkdirAll(s.outputDir, 0755); err != nil {
+	if err := os.MkdirAll(s.outputDir, 0750); err != nil {
 		return nil, fmt.Errorf("mkdir: %w", err)
 	}
 	outPattern := filepath.Join(s.outputDir, fmt.Sprintf("%s_thumb_%%04d.jpg", itemID))
