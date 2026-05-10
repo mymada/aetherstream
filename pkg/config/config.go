@@ -73,8 +73,8 @@ func Load(path string) (*Config, error) {
 			cfg.Server.Port = p
 		}
 	} else {
-		// Default to 8080 for Docker environments
-		cfg.Server.Port = 8080
+		// Default to 8081 for environments where 8080 is taken
+		cfg.Server.Port = 8081
 	}
 	if host := os.Getenv("AETHERSTREAM_SERVER_HOST"); host != "" {
 		cfg.Server.Host = host
@@ -123,7 +123,7 @@ func Load(path string) (*Config, error) {
 func Defaults() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Port:       8080,
+			Port:       8081,
 			Host:       "0.0.0.0",
 			StaticPath: "./web/static",
 		},
