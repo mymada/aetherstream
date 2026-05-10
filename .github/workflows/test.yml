@@ -1,0 +1,100 @@
+name: Test
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  test:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential jq
+
+      - name: Install gosec
+        run: |
+          curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.21.4
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: 1. Build
+        run: |
+          export CGO_CFLAGS="-DSQLITE_ENABLE_FTS5"
+          export CGO_LDFLAGS="-lm"
+          go build ./...
+
+      - name: 2. Unit tests
+        run: |
+          export CGO_CFLAGS="-DSQLITE_ENABLE_FTS5"
+          export CGO_LDFLAGS="-lm"
+          go test ./... -count=1 -short -coverprofile=coverage.out -covermode=atomic
+
+      - name: 3. E2E tests
+        run: |
+          export CGO_CFLAGS="-DSQLITE_ENABLE_FTS5"
+          export CGO_LDFLAGS="-lm"
+          if [ -d "tests/e2e" ]; then
+            go test ./tests/e2e/... -count=1 -timeout 5m
+          elif [ -d "e2e" ]; then
+            go test ./e2e/... -count=1 -timeout 5m
+          else
+            echo "No E2E tests found, skipping."
+          fi
+
+      - name: 4. gosec 0-0-0
+        run: |
+          gosec -fmt json -out gosec-report.json ./...
+          HIGH=$(jq -r '.Stats.high // 0' gosec-report.json)
+          MEDIUM=$(jq -r '.Stats.medium // 0' gosec-report.json)
+          LOW=$(jq -r '.Stats.low // 0' gosec-report.json)
+          echo "gosec findings: High=$HIGH, Medium=$MEDIUM, Low=$LOW"
+          if [ "$HIGH" -ne 0 ] || [ "$MEDIUM" -ne 0 ] || [ "$LOW" -ne 0 ]; then
+            echo "gosec failed: expected 0-0-0, got $HIGH-$MEDIUM-$LOW"
+            exit 1
+          fi
+          echo "gosec 0-0-0 OK"
+
+      - name: 5. go vet
+        run: go vet ./...
+
+      - name: 6. Coverage report
+        run: |
+          go tool cover -func=coverage.out | grep total
+
+      - name: 7. HTML coverage report
+        run: |
+          mkdir -p coverage
+          go tool cover -html=coverage.out -o coverage/coverage.html
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/coverage.html
+          retention-days: 30
+
+      - name: Upload gosec report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosec-report
+          path: gosec-report.json
+          retention-days: 30
+
+      - name: Upload raw coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-out
+          path: coverage.out
+          retention-days: 30
