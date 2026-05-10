@@ -98,10 +98,10 @@ func Import(backupPath, dbPath, configPath string) error {
 				return fmt.Errorf("open manifest: %w", err)
 			}
 			if err := json.NewDecoder(rc).Decode(&manifest); err != nil {
-				rc.Close()
+				_ = rc.Close()
 				return fmt.Errorf("decode manifest: %w", err)
 			}
-			rc.Close()
+			_ = rc.Close()
 			foundManifest = true
 			break
 		}
@@ -146,9 +146,9 @@ func extractFile(zf *zip.File, destPath string) error {
 	}
 	const maxDecompressedSize = 100 * 1024 * 1024 // 100MB limit
 	_, err = io.CopyN(df, rc, maxDecompressedSize)
-	df.Close()
+	_ = df.Close()
 	if err != nil && err != io.EOF {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	return os.Rename(tmpPath, destPath)

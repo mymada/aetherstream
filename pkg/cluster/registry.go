@@ -83,7 +83,7 @@ func (r *NodeRegistry) Start() error {
 				return
 			default:
 			}
-			conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			_ = conn.SetReadDeadline(time.Now().Add(1 * time.Second))
 			n, remote, err := conn.ReadFromUDP(buf)
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -127,7 +127,7 @@ func (r *NodeRegistry) Start() error {
 func (r *NodeRegistry) Stop() {
 	close(r.stopCh)
 	if r.gossipConn != nil {
-		r.gossipConn.Close()
+		_ = r.gossipConn.Close()
 	}
 	r.wg.Wait()
 }
@@ -194,7 +194,7 @@ func (r *NodeRegistry) broadcastPing() {
 		return
 	}
 	if r.gossipConn != nil {
-		r.gossipConn.WriteToUDP(data, addr)
+		_, _ = r.gossipConn.WriteToUDP(data, addr)
 	}
 }
 
@@ -208,7 +208,7 @@ func (r *NodeRegistry) sendPong(remote *net.UDPAddr) {
 	}
 	data, _ := json.Marshal(msg)
 	if r.gossipConn != nil {
-		r.gossipConn.WriteToUDP(data, remote)
+		_, _ = r.gossipConn.WriteToUDP(data, remote)
 	}
 }
 

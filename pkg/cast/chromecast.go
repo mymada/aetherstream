@@ -157,7 +157,7 @@ func (cc *ChromecastController) ssdpDiscoveryLoop() {
 		default:
 		}
 
-		conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(1 * time.Second))
 		n, remoteAddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -257,7 +257,7 @@ func (cc *ChromecastController) launchAndLoad(dev *CastDevice, mediaURL string, 
 		cc.updateSessionState(sess.ID, "idle")
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Step 2: send LOAD command with media URL
 	// In real implementation this uses the Castv2 protocol (protobuf over TLS).

@@ -1,0 +1,204 @@
+{
+	"Golang errors": {},
+	"Issues": [
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "718: \u003c/s:Envelope\u003e`, code, xmlEscape(desc))\n719: \tw.Write([]byte(output))\n720: }\n",
+			"line": "719",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "697: \u003c/s:Envelope\u003e`\n698: \tw.Write([]byte(output))\n699: }\n",
+			"line": "698",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "677: \u003c/s:Envelope\u003e`\n678: \tw.Write([]byte(output))\n679: }\n",
+			"line": "678",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "663: \u003c/s:Envelope\u003e`\n664: \tw.Write([]byte(output))\n665: }\n",
+			"line": "664",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "526: \u003c/s:Envelope\u003e`, xmlEscape(result))\n527: \tw.Write([]byte(output))\n528: }\n",
+			"line": "527",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "314: \tvar buf bytes.Buffer\n315: \txml.EscapeText(\u0026buf, []byte(s))\n316: \treturn buf.String()\n",
+			"line": "315",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "261: \tw.Header().Set(\"Content-Type\", \"application/xml\")\n262: \tw.Write([]byte(s.buildDeviceDescription()))\n263: }\n",
+			"line": "262",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "243: \tdefer conn.Close()\n244: \tconn.Write([]byte(response))\n245: }\n",
+			"line": "244",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "185: \n186: \t\ts.ssdpConn.SetReadDeadline(time.Now().Add(1 * time.Second))\n187: \t\tn, remoteAddr, err := s.ssdpConn.ReadFromUDP(buf)\n",
+			"line": "186",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "156: \t\tconn.Write([]byte(msg))\n157: \t\tconn.Close()\n158: \t}\n",
+			"line": "157",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "155: \t\t}\n156: \t\tconn.Write([]byte(msg))\n157: \t\tconn.Close()\n",
+			"line": "156",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "91: \tif s.ssdpConn != nil {\n92: \t\ts.ssdpConn.Close()\n93: \t}\n",
+			"line": "92",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 1,
+		"lines": 793,
+		"nosec": 1,
+		"found": 12
+	},
+	"GosecVersion": "dev"
+}

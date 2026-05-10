@@ -300,10 +300,15 @@ func (m *Manager) recordStream(ch *Channel, rec *Recording) {
 	done := time.After(rec.StopTime.Sub(time.Now()))
 	go func() {
 		<-done
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}()
 
-	io.Copy(f, resp.Body)
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		log.Error().Err(err).Str("recording", rec.ID).Msg("recording copy failed")
+		rec.Status = "failed"
+		return
+	}
 	rec.Status = "completed"
 	log.Info().Str("recording", rec.ID).Str("channel", ch.Name).Msg("recording completed")
 }
@@ -327,7 +332,7 @@ type Segment struct {
 
 // NewTimeshiftBuffer creates a circular buffer
 func NewTimeshiftBuffer(dir string, maxSegments int) *TimeshiftBuffer {
-	os.MkdirAll(dir, 0750)
+	_ = os.MkdirAll(dir, 0750)
 	return &TimeshiftBuffer{
 		segments: make([]Segment, 0, maxSegments),
 		maxSize:  maxSegments,
@@ -354,7 +359,9 @@ func (b *TimeshiftBuffer) WriteSegment(data []byte, duration time.Duration) (str
 	if len(b.segments) >= b.maxSize {
 		// Remove oldest
 		oldest := b.segments[0]
-		os.Remove(oldest.Path)
+		if err := os.Remove(oldest.Path); err != nil {
+			log.Error().Err(err).Str("path", oldest.Path).Msg("failed to remove old segment")
+		}
 		b.segments = b.segments[1:]
 	}
 

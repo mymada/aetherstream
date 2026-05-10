@@ -136,6 +136,6 @@ func proxyRequest(c echo.Context, targetAddr string) error {
 		}
 	}
 	c.Response().WriteHeader(resp.StatusCode)
-	io.Copy(c.Response().Writer, resp.Body)
+	_, _ = io.Copy(c.Response().Writer, resp.Body)
 	return nil
 }

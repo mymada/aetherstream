@@ -173,7 +173,7 @@ func (d *DB) RefreshAutoCollections(userID, groupBy string) error {
 			}
 			_ = d.AddItemToAutoCollection(ac.ID, itemID)
 		}
-		itemRows.Close()
+		_ = itemRows.Close()
 	}
 	return nil
 }

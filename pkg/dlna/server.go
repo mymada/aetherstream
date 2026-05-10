@@ -89,7 +89,7 @@ func (s *Server) Start() error {
 func (s *Server) Stop() error {
 	close(s.ssdpStop)
 	if s.ssdpConn != nil {
-		s.ssdpConn.Close()
+		_ = s.ssdpConn.Close()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -153,8 +153,8 @@ func (s *Server) sendSSDPNotify() {
 		if err != nil {
 			continue
 		}
-		conn.Write([]byte(msg))
-		conn.Close()
+		_, _ = conn.Write([]byte(msg))
+		_ = conn.Close()
 	}
 }
 
@@ -183,7 +183,7 @@ func (s *Server) ssdpListenLoop() {
 		default:
 		}
 
-		s.ssdpConn.SetReadDeadline(time.Now().Add(1 * time.Second))
+		_ = s.ssdpConn.SetReadDeadline(time.Now().Add(1 * time.Second))
 		n, remoteAddr, err := s.ssdpConn.ReadFromUDP(buf)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -241,7 +241,7 @@ func (s *Server) handleMSEARCH(msg string, remoteAddr *net.UDPAddr) {
 		return
 	}
 	defer conn.Close()
-	conn.Write([]byte(response))
+	_, _ = conn.Write([]byte(response))
 }
 
 func extractHeader(msg, name string) string {
@@ -259,7 +259,7 @@ func extractHeader(msg, name string) string {
 
 func (s *Server) handleDeviceDescription(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml")
-	w.Write([]byte(s.buildDeviceDescription()))
+	_, _ = w.Write([]byte(s.buildDeviceDescription()))
 }
 
 func (s *Server) buildDeviceDescription() string {
@@ -312,7 +312,7 @@ func (s *Server) buildDeviceDescription() string {
 
 func xmlEscape(s string) string {
 	var buf bytes.Buffer
-	xml.EscapeText(&buf, []byte(s))
+	_ = xml.EscapeText(&buf, []byte(s))
 	return buf.String()
 }
 
@@ -463,7 +463,7 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request, body []byt
     </u:BrowseResponse>
   </s:Body>
 </s:Envelope>`, xmlEscape(result), total, total, 1)
-	w.Write([]byte(output))
+	_, _ = w.Write([]byte(output))
 }
 
 // parseBrowseRequest extracts Browse parameters from any SOAP body using regex-like string extraction
@@ -524,7 +524,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request, body []byt
     </u:SearchResponse>
   </s:Body>
 </s:Envelope>`, xmlEscape(result))
-	w.Write([]byte(output))
+	_, _ = w.Write([]byte(output))
 }
 
 func (s *Server) buildBrowseResult(objectID, browseFlag string, startIndex, count int) (string, int, error) {
@@ -661,7 +661,7 @@ func (s *Server) handleGetProtocolInfo(w http.ResponseWriter) {
     </u:GetProtocolInfoResponse>
   </s:Body>
 </s:Envelope>`
-	w.Write([]byte(output))
+	_, _ = w.Write([]byte(output))
 }
 
 func (s *Server) handleGetCurrentConnectionIDs(w http.ResponseWriter) {
@@ -675,7 +675,7 @@ func (s *Server) handleGetCurrentConnectionIDs(w http.ResponseWriter) {
     </u:GetCurrentConnectionIDsResponse>
   </s:Body>
 </s:Envelope>`
-	w.Write([]byte(output))
+	_, _ = w.Write([]byte(output))
 }
 
 func (s *Server) handleGetCurrentConnectionInfo(w http.ResponseWriter) {
@@ -695,7 +695,7 @@ func (s *Server) handleGetCurrentConnectionInfo(w http.ResponseWriter) {
     </u:GetCurrentConnectionInfoResponse>
   </s:Body>
 </s:Envelope>`
-	w.Write([]byte(output))
+	_, _ = w.Write([]byte(output))
 }
 
 func (s *Server) writeSOAPError(w http.ResponseWriter, code int, desc string) {
@@ -716,7 +716,7 @@ func (s *Server) writeSOAPError(w http.ResponseWriter, code int, desc string) {
     </s:Fault>
   </s:Body>
 </s:Envelope>`, code, xmlEscape(desc))
-	w.Write([]byte(output))
+	_, _ = w.Write([]byte(output))
 }
 
 // --- Content Delivery ---

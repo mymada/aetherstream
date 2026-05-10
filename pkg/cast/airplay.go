@@ -221,7 +221,7 @@ func (ac *AirPlayController) sendStop(sess *Session) {
 	if err != nil {
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func (ac *AirPlayController) updateSessionState(sessionID, state string) {
