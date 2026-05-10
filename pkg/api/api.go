@@ -54,6 +54,13 @@ func NewServer(database *db.DB, authSvc *auth.Service, cfg *config.Config, libMg
 func (s *Server) RegisterRoutes(e *echo.Echo) {
 	s.e = e
 
+	// Global security middlewares
+	e.Use(SecurityHeaders())
+	e.Use(SecureCookieMiddleware())
+	e.Use(CSRFProtection())
+	e.Use(BruteForceProtection())
+	e.Use(CORSMiddleware())
+
 	// Health / system
 	e.GET("/system/info", s.handleSystemInfo, RateLimitByIP(1000))
 	e.GET("/api/system/hardware", s.handleSystemHardware, RateLimitByIP(1000))
@@ -66,6 +73,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	// Protected routes
 	api := e.Group("/api")
 	api.Use(s.auth.Middleware())
+	api.Use(SessionTimeout(30 * time.Minute))
 
 	// Users
 	api.GET("/users", s.handleListUsers)
@@ -135,18 +143,22 @@ func (s *Server) handleLogin(c echo.Context) error {
 		return echo.NewHTTPError(400, "invalid request")
 	}
 
-	// Lookup user from DB
+	ip := c.RealIP()
+
+	// Brute-force check already enforced by middleware; record on failure.
 	_, passwordHash, _, err := s.db.GetUserByUsername(req.Username)
 	if err != nil {
+		RecordFailedLogin(ip, req.Username)
 		return echo.NewHTTPError(401, "invalid credentials")
 	}
 
-	// Verify password with bcrypt
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+		RecordFailedLogin(ip, req.Username)
 		return echo.NewHTTPError(401, "invalid credentials")
 	}
 
-	// Generate JWT token with actual user info
+	ResetBruteForce(ip, req.Username)
+
 	token, err := s.auth.GenerateToken("admin-1", req.Username, "admin")
 	if err != nil {
 		return echo.NewHTTPError(500, "token generation failed")

@@ -36,7 +36,7 @@ def send_telegram(message):
         data = json.dumps({
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
-            "parse_mode": "Markdown",
+            "parse_mode": "HTML",
         }).encode()
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=15)
@@ -197,16 +197,20 @@ def main():
     # Build and send Telegram report
     current_idx = state["current_phase"]
     current = PHASES[current_idx]
-    report = f"""*AetherStream Report*
+    status_emoji = "✅" if state["phase_status"][current] == "completed" else "🔧"
+    build_emoji = "✅" if state["build_ok"] else "❌"
+    tests_emoji = "✅" if state["tests_ok"] else "❌"
+    next_action = "ALL PHASES COMPLETE" if current_idx >= len(PHASES) - 1 and state["phase_status"][current] == "completed" else "Continue current phase"
+    report = f"""🎬 AetherStream Report
 
-Phase: `{current}`
-Status: {state["phase_status"][current]}
+Phase: {current_idx + 1}/5 — {current}
+Status: {status_emoji} {state["phase_status"][current]}
 Health: {state["health_score"]:.1f}/10
-Build: {"OK" if state["build_ok"] else "FAIL"}
-Tests: {"OK" if state["tests_ok"] else "FAIL"}
+Build: {build_emoji}
+Tests: {tests_emoji}
 Crashes: {len(state["crashes"])}
 
-Next run: +1h"""
+Next: {next_action}"""
     send_telegram(report)
 
     save_state(state)

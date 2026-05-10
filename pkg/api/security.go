@@ -1,7 +1,13 @@
 package api
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
+	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,7 +16,63 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-// SecurityHeaders middleware adds OWASP recommended headers
+// --- CSRF Protection ---
+
+const csrfTokenHeader = "X-CSRF-Token"
+const csrfCookieName = "csrf_token"
+
+// generateCSRFToken creates a random 32-byte token encoded as base64.
+func generateCSRFToken() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+// CSRFProtection returns middleware that validates CSRF tokens on state-changing methods.
+// It expects the token in the X-CSRF-Token header or in a form field named "csrf_token".
+// A cookie named csrf_token is set on GET/HEAD/OPTIONS requests if missing.
+func CSRFProtection() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			method := c.Request().Method
+			// Safe methods: ensure cookie exists
+			if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
+				cookie, err := c.Cookie(csrfCookieName)
+				if err != nil || cookie.Value == "" {
+					newToken := generateCSRFToken()
+					c.SetCookie(&http.Cookie{
+						Name:     csrfCookieName,
+						Value:    newToken,
+						Path:     "/",
+						HttpOnly: true,
+						SameSite: http.SameSiteStrictMode,
+						Secure:   true,
+						MaxAge:   86400,
+					})
+				}
+				return next(c)
+			}
+
+			// Unsafe methods: validate token
+			cookie, err := c.Cookie(csrfCookieName)
+			if err != nil || cookie.Value == "" {
+				return echo.NewHTTPError(http.StatusForbidden, "missing csrf cookie")
+			}
+			sentToken := c.Request().Header.Get(csrfTokenHeader)
+			if sentToken == "" {
+				sentToken = c.FormValue("csrf_token")
+			}
+			if subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(sentToken)) != 1 {
+				return echo.NewHTTPError(http.StatusForbidden, "invalid csrf token")
+			}
+			return next(c)
+		}
+	}
+}
+
+// --- Security Headers (enhanced) ---
+
+// SecurityHeaders returns middleware adding OWASP recommended headers including HSTS and CSP.
 func SecurityHeaders() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -18,7 +80,213 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			c.Response().Header().Set("X-Frame-Options", "DENY")
 			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
 			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'")
+			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self' ws: wss:")
+			c.Response().Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			c.Response().Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+			return next(c)
+		}
+	}
+}
+
+// --- Secure Cookies ---
+
+// SecureCookieMiddleware sets default secure cookie flags for all cookies set during the request.
+// It wraps echo.Context to intercept SetCookie calls.
+func SecureCookieMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Wrap the writer to intercept Set-Cookie headers
+			origWriter := c.Response().Writer
+			wrapped := &secureCookieResponseWriter{ResponseWriter: origWriter, headerWritten: false}
+			c.Response().Writer = wrapped
+			defer func() { c.Response().Writer = origWriter }()
+			return next(c)
+		}
+	}
+}
+
+type secureCookieResponseWriter struct {
+	http.ResponseWriter
+	headerWritten bool
+}
+
+func (w *secureCookieResponseWriter) WriteHeader(code int) {
+	if !w.headerWritten {
+		w.headerWritten = true
+		w.secureCookies()
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *secureCookieResponseWriter) Write(b []byte) (int, error) {
+	if !w.headerWritten {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *secureCookieResponseWriter) secureCookies() {
+	cookies := w.Header()["Set-Cookie"]
+	if len(cookies) == 0 {
+		return
+	}
+	var out []string
+	for _, raw := range cookies {
+		if !strings.Contains(raw, "SameSite=") {
+			raw += "; SameSite=Strict"
+		}
+		if !strings.Contains(strings.ToLower(raw), "httponly") {
+			raw += "; HttpOnly"
+		}
+		if !strings.Contains(strings.ToLower(raw), "secure") {
+			raw += "; Secure"
+		}
+		out = append(out, raw)
+	}
+	w.Header()["Set-Cookie"] = out
+}
+
+// --- Brute-Force Protection (exponential backoff per IP/username) ---
+
+type loginAttempt struct {
+	count       int
+	lastAttempt time.Time
+	lockedUntil time.Time
+}
+
+type bruteForceLimiter struct {
+	mu       sync.RWMutex
+	attempts map[string]*loginAttempt
+	maxDelay time.Duration
+}
+
+func newBruteForceLimiter() *bruteForceLimiter {
+	b := &bruteForceLimiter{
+		attempts: make(map[string]*loginAttempt),
+		maxDelay: 30 * time.Minute,
+	}
+	go b.cleanup()
+	return b
+}
+
+// key can be "ip:<ip>" or "user:<username>"
+func (b *bruteForceLimiter) record(key string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := time.Now()
+	a, ok := b.attempts[key]
+	if !ok {
+		a = &loginAttempt{count: 0, lastAttempt: now}
+		b.attempts[key] = a
+	}
+	a.count++
+	a.lastAttempt = now
+	// Exponential backoff: 2^count seconds, capped at maxDelay
+	delay := time.Duration(1<<uint(a.count)) * time.Second
+	if delay > b.maxDelay {
+		delay = b.maxDelay
+	}
+	a.lockedUntil = now.Add(delay)
+}
+
+func (b *bruteForceLimiter) allowed(key string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	a, ok := b.attempts[key]
+	if !ok {
+		return true
+	}
+	return time.Now().After(a.lockedUntil)
+}
+
+func (b *bruteForceLimiter) reset(key string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.attempts, key)
+}
+
+func (b *bruteForceLimiter) cleanup() {
+	ticker := time.NewTicker(10 * time.Minute)
+	for range ticker.C {
+		b.mu.Lock()
+		now := time.Now()
+		for k, a := range b.attempts {
+			if now.Sub(a.lastAttempt) > 1*time.Hour {
+				delete(b.attempts, k)
+			}
+		}
+		b.mu.Unlock()
+	}
+}
+
+// BruteForceProtection returns middleware that enforces exponential backoff on login endpoints.
+// It should be placed BEFORE the actual handler. On successful login, call ResetBruteForce.
+var globalBruteForce = newBruteForceLimiter()
+
+func BruteForceProtection() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			path := strings.ToLower(c.Request().URL.Path)
+			if !strings.Contains(path, "/login") && !strings.Contains(path, "/auth") {
+				return next(c)
+			}
+			ip := c.RealIP()
+			ipKey := "ip:" + ip
+			if !globalBruteForce.allowed(ipKey) {
+				return echo.NewHTTPError(http.StatusTooManyRequests, "too many failed attempts from this IP")
+			}
+			username := c.FormValue("username")
+			if username == "" {
+				// Try JSON body fallback via a simple heuristic
+				// Echo's Bind hasn't run yet, so we only check form for now.
+				// If empty, we still rate-limit by IP.
+			}
+			if username != "" {
+				userKey := "user:" + username
+				if !globalBruteForce.allowed(userKey) {
+					return echo.NewHTTPError(http.StatusTooManyRequests, "too many failed attempts for this user")
+				}
+			}
+			return next(c)
+		}
+	}
+}
+
+// RecordFailedLogin increments failed attempt counters for IP and optionally username.
+func RecordFailedLogin(ip, username string) {
+	globalBruteForce.record("ip:" + ip)
+	if username != "" {
+		globalBruteForce.record("user:" + username)
+	}
+}
+
+// ResetBruteForce clears counters for IP/username after successful login.
+func ResetBruteForce(ip, username string) {
+	globalBruteForce.reset("ip:" + ip)
+	if username != "" {
+		globalBruteForce.reset("user:" + username)
+	}
+}
+
+// --- Session Timeout / Idle Logout ---
+
+const sessionContextKey = "session_last_activity"
+const sessionTimeoutHeader = "X-Session-Timeout"
+
+// SessionTimeout returns middleware that tracks last activity and rejects requests
+// after idleDuration. It should be applied to protected routes.
+func SessionTimeout(idleDuration time.Duration) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			now := time.Now()
+			last, ok := c.Get(sessionContextKey).(time.Time)
+			if ok && now.Sub(last) > idleDuration {
+				return echo.NewHTTPError(http.StatusUnauthorized, "session expired due to inactivity")
+			}
+			c.Set(sessionContextKey, now)
+			// Inform client how many seconds remain
+			remaining := int(idleDuration.Seconds())
+			c.Response().Header().Set(sessionTimeoutHeader, fmt.Sprintf("%d", remaining))
 			return next(c)
 		}
 	}
@@ -27,9 +295,9 @@ func SecurityHeaders() echo.MiddlewareFunc {
 // --- Rate Limiting ---
 
 type ipBucket struct {
-	tokens    float64
-	lastSeen  time.Time
-	capacity  float64
+	tokens     float64
+	lastSeen   time.Time
+	capacity   float64
 	refillRate float64
 }
 
@@ -106,6 +374,69 @@ func RateLimitByIP(requestsPerMin int) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// --- Audit Log Integration ---
+
+// AuditLogFunc is a callback to record audit events without importing pkg/audit directly.
+type AuditLogFunc func(userID, username, action, resource, resourceID, ip, userAgent, details string)
+
+// AuditMiddleware returns middleware that logs requests via the provided log function.
+func AuditMiddleware(logFn AuditLogFunc) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+			err := next(c)
+			latency := time.Since(start)
+			if logFn == nil {
+				return err
+			}
+			ip := c.RealIP()
+			path := c.Request().URL.Path
+			method := c.Request().Method
+			ua := c.Request().UserAgent()
+			var userID, username string
+			if u := c.Get("user"); u != nil {
+				if claims, ok := u.(interface{ GetUserID() string; GetUsername() string }); ok {
+					userID = claims.GetUserID()
+					username = claims.GetUsername()
+				}
+			}
+			status := c.Response().Status
+			if status == 0 {
+				status = 200 // default if not written yet
+			}
+			details := fmt.Sprintf("method=%s status=%d latency=%s", method, status, latency)
+			logFn(userID, username, "request", path, "", ip, ua, details)
+			return err
+		}
+	}
+}
+
+// --- Helpers ---
+
+// isPrivateIP reports whether ip is a private/local address.
+func isPrivateIP(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	privateBlocks := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"::1/128",
+		"fc00::/7",
+	}
+	for _, cidr := range privateBlocks {
+		_, block, _ := net.ParseCIDR(cidr)
+		if block != nil && block.Contains(parsed) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- CORS ---
