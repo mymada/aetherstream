@@ -765,7 +765,6 @@ func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 	if len(mediaDirs) == 0 {
 		mediaDirs = []string{"./media"} // default media directory
 	}
-	// Also allow temp files created by tests (in /tmp) by adding /tmp as an allowed dir in test contexts
 	if !isPathInMediaDirs(itemPath, mediaDirs) {
 		http.Error(w, "path not in media directories", http.StatusForbidden)
 		return

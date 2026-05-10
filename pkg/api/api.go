@@ -11,6 +11,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/auth"
 	"github.com/devuser/aetherstream/pkg/config"
 	"github.com/devuser/aetherstream/pkg/db"
+	"github.com/devuser/aetherstream/pkg/encoder"
 	"github.com/devuser/aetherstream/pkg/library"
 	"github.com/devuser/aetherstream/pkg/probe"
 	"github.com/devuser/aetherstream/pkg/search"
@@ -55,6 +56,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 
 	// Health / system
 	e.GET("/system/info", s.handleSystemInfo, RateLimitByIP(1000))
+	e.GET("/api/system/hardware", s.handleSystemHardware, RateLimitByIP(1000))
 
 	// Auth routes (public)
 	e.POST("/auth/login", s.handleLogin, RateLimitByIP(10))
@@ -117,6 +119,11 @@ func (s *Server) handleSystemInfo(c echo.Context) error {
 		"version": "0.1.0",
 		"status":  "ok",
 	})
+}
+
+func (s *Server) handleSystemHardware(c echo.Context) error {
+	caps := encoder.DetectHardwareCapabilities()
+	return c.JSON(http.StatusOK, caps)
 }
 
 func (s *Server) handleLogin(c echo.Context) error {

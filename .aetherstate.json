@@ -10,7 +10,7 @@
   "last_audit": null,
   "health_score": 10.0,
   "build_ok": true,
-  "tests_ok": false,
-  "last_run": "2026-05-10T10:00:29.644719",
+  "tests_ok": true,
+  "last_run": "2026-05-10T10:27:07.943886",
   "crashes": []
 }
