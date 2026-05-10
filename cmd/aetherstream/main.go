@@ -18,6 +18,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/api"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/auth"
+	"github.com/devuser/aetherstream/pkg/dlna"
 	"github.com/devuser/aetherstream/pkg/library"
 	"github.com/devuser/aetherstream/pkg/securestore"
 )
@@ -84,6 +85,13 @@ func main() {
 	// API routes
 	apiServer := api.NewServer(database, authSvc, cfg, libMgr, secureStore)
 	apiServer.RegisterRoutes(e)
+
+	// DLNA/UPnP server
+	dlnaServer := dlna.NewServer(database, cfg.Server.Host, cfg.Server.Port+1, "AetherStream")
+	if err := dlnaServer.Start(); err != nil {
+		log.Warn().Err(err).Msg("DLNA server failed to start")
+	}
+	defer dlnaServer.Stop()
 
 	// Start
 	go func() {
