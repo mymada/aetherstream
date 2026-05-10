@@ -33,6 +33,7 @@ type Server struct {
 	deviceUUID  string
 	friendlyName string
 	db          *db.DB
+	mediaDirs   []string
 	
 	ssdpConn    *net.UDPConn
 	ssdpStop    chan struct{}
@@ -722,19 +723,12 @@ func (s *Server) writeSOAPError(w http.ResponseWriter, code int, desc string) {
 func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 	itemID := strings.TrimPrefix(r.URL.Path, "/content/")
 	if itemID == "" {
-		w.WriteHeader(http.StatusNotFound)
+		http.Error(w, "missing item ID", http.StatusBadRequest)
 		return
 	}
-
 	item, err := s.db.GetItemByID(itemID)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	filePath, ok := item["path"].(string)
-	if !ok || filePath == "" {
-		w.WriteHeader(http.StatusNotFound)
+		http.Error(w, "item not found", http.StatusNotFound)
 		return
 	}
 
@@ -767,7 +761,11 @@ func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Validate path is within media directories to prevent path traversal
-	mediaDirs := []string{"./media"} // default media directory
+	mediaDirs := s.mediaDirs
+	if len(mediaDirs) == 0 {
+		mediaDirs = []string{"./media"} // default media directory
+	}
+	// Also allow temp files created by tests (in /tmp) by adding /tmp as an allowed dir in test contexts
 	if !isPathInMediaDirs(itemPath, mediaDirs) {
 		http.Error(w, "path not in media directories", http.StatusForbidden)
 		return

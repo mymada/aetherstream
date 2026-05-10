@@ -138,6 +138,33 @@ CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(
 `
 	if _, err := d.Exec(ftsSchema); err != nil {
 		// FTS5 may not be available; log but don't fail
+		// Create a plain fallback table so search works when FTS5 is unavailable
+		fallbackSchema := `
+CREATE TABLE IF NOT EXISTS items_fts (
+	item_id TEXT PRIMARY KEY,
+	title TEXT,
+	description TEXT,
+	actors TEXT,
+	director TEXT
+);
+`
+		if _, err2 := d.Exec(fallbackSchema); err2 != nil {
+			return nil
+		}
+		return nil
+	}
+
+	// Also create a plain fallback table so search works when FTS5 is unavailable
+	fallbackSchema := `
+CREATE TABLE IF NOT EXISTS items_fts (
+	item_id TEXT PRIMARY KEY,
+	title TEXT,
+	description TEXT,
+	actors TEXT,
+	director TEXT
+);
+`
+	if _, err := d.Exec(fallbackSchema); err != nil {
 		return nil
 	}
 
@@ -525,6 +552,18 @@ func (d *DB) SearchItemsFTS(query, mediaType string, limit int) ([]map[string]in
 			WHERE items_fts MATCH ? AND i.media_type = ?
 			ORDER BY rank
 			LIMIT ?`, query, mediaType, limit)
+		if err != nil {
+			// Fallback: if FTS5 is unavailable, use LIKE search on items_fts fallback table
+			rows, err = d.Query(`
+				SELECT i.id, i.library_id, i.path, i.name, i.media_type, i.container,
+					i.size_bytes, i.duration_seconds, i.width, i.height,
+					i.video_codec, i.audio_codec, i.created_at
+				FROM items_fts
+				JOIN items i ON i.id = items_fts.item_id
+				WHERE (items_fts.title LIKE ? OR items_fts.description LIKE ? OR items_fts.actors LIKE ? OR items_fts.director LIKE ?)
+					AND i.media_type = ?
+				LIMIT ?`, "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%", mediaType, limit)
+		}
 	} else {
 		rows, err = d.Query(`
 			SELECT i.id, i.library_id, i.path, i.name, i.media_type, i.container,
@@ -535,6 +574,17 @@ func (d *DB) SearchItemsFTS(query, mediaType string, limit int) ([]map[string]in
 			WHERE items_fts MATCH ?
 			ORDER BY rank
 			LIMIT ?`, query, limit)
+		if err != nil {
+			// Fallback: if FTS5 is unavailable, use LIKE search on items_fts fallback table
+			rows, err = d.Query(`
+				SELECT i.id, i.library_id, i.path, i.name, i.media_type, i.container,
+					i.size_bytes, i.duration_seconds, i.width, i.height,
+					i.video_codec, i.audio_codec, i.created_at
+				FROM items_fts
+				JOIN items i ON i.id = items_fts.item_id
+				WHERE items_fts.title LIKE ? OR items_fts.description LIKE ? OR items_fts.actors LIKE ? OR items_fts.director LIKE ?
+				LIMIT ?`, "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%", limit)
+		}
 	}
 	if err != nil {
 		return nil, err

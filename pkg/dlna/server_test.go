@@ -312,6 +312,7 @@ func TestContentDeliveryFile(t *testing.T) {
 	require.NoError(t, database.CreateItem("item-1", "lib-1", tmpFile.Name(), "test.mp4", "video", "mp4", 18, 10, 1920, 1080, "h264", "aac"))
 
 	srv := NewServer(database, "127.0.0.1", 1901, "TestAether")
+	srv.mediaDirs = []string{"/tmp"}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/content/item-1", nil)
 	srv.handleContentDelivery(w, r)

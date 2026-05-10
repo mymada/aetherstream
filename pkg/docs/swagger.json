@@ -1,0 +1,343 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AetherStream API",
+    "description": "Media server API - Jellyfin rewrite in Go",
+    "version": "1.0.0",
+    "contact": {
+      "name": "AetherStream",
+      "url": "https://github.com/mymada/aetherstream"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/system/info": {
+      "get": {
+        "summary": "Get system information",
+        "description": "Returns server version, uptime, and platform info",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "System information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": { "type": "string", "example": "1.0.0" },
+                    "uptime": { "type": "string", "example": "2h15m" },
+                    "platform": { "type": "string", "example": "linux/amd64" },
+                    "go_version": { "type": "string", "example": "go1.25" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate user",
+        "description": "Login with username and password to receive JWT token",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string", "example": "admin" },
+                  "password": { "type": "string", "example": "admin", "format": "password" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": { "type": "string" },
+                    "user_id": { "type": "string" },
+                    "role": { "type": "string", "example": "admin" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "summary": "List all users",
+        "description": "Returns list of all registered users (admin only)",
+        "tags": ["Users"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "username": { "type": "string" },
+                      "role": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Forbidden - admin required" }
+        }
+      }
+    },
+    "/api/libraries": {
+      "get": {
+        "summary": "List libraries",
+        "description": "Returns all media libraries",
+        "tags": ["Libraries"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of libraries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "name": { "type": "string" },
+                      "path": { "type": "string" },
+                      "type": { "type": "string", "enum": ["movies", "tv", "music", "mixed"] }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create library",
+        "description": "Create a new media library",
+        "tags": ["Libraries"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "path", "type"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "path": { "type": "string" },
+                  "type": { "type": "string", "enum": ["movies", "tv", "music", "mixed"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Library created" },
+          "400": { "description": "Invalid input" }
+        }
+      }
+    },
+    "/api/items": {
+      "get": {
+        "summary": "List items",
+        "description": "Returns media items with optional filtering",
+        "tags": ["Items"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "library_id",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "Filter by library ID"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["movie", "episode", "track"] },
+            "description": "Filter by media type"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "title": { "type": "string" },
+                      "type": { "type": "string" },
+                      "year": { "type": "integer" },
+                      "path": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "summary": "Search items",
+        "description": "Full-text search across media items using SQLite FTS5",
+        "tags": ["Search"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Search query"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 },
+            "description": "Max results"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": { "type": "array" },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/videos/{id}/stream": {
+      "get": {
+        "summary": "Stream video",
+        "description": "Direct video streaming with range support",
+        "tags": ["Streaming"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Item ID"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Video stream" },
+          "206": { "description": "Partial content (range request)" },
+          "404": { "description": "Item not found" }
+        }
+      }
+    },
+    "/videos/{id}/hls/master.m3u8": {
+      "get": {
+        "summary": "HLS master playlist",
+        "description": "Returns HLS master playlist for adaptive streaming",
+        "tags": ["Streaming"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HLS master playlist",
+            "content": {
+              "application/vnd.apple.mpegurl": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/collections": {
+      "get": {
+        "summary": "List collections",
+        "description": "Returns user collections",
+        "tags": ["Collections"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of collections" }
+        }
+      }
+    },
+    "/api/activity": {
+      "get": {
+        "summary": "Activity log",
+        "description": "Returns recent activity events",
+        "tags": ["Activity"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Activity events" }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "summary": "WebSocket realtime",
+        "description": "WebSocket endpoint for realtime sync events",
+        "tags": ["Realtime"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "101": { "description": "WebSocket upgrade" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

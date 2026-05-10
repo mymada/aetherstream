@@ -19,6 +19,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/auth"
 	"github.com/devuser/aetherstream/pkg/dlna"
+	"github.com/devuser/aetherstream/pkg/docs"
 	"github.com/devuser/aetherstream/pkg/library"
 	"github.com/devuser/aetherstream/pkg/metrics"
 	"github.com/devuser/aetherstream/pkg/securestore"
@@ -111,6 +112,9 @@ func main() {
 	// API routes
 	apiServer := api.NewServer(database, authSvc, cfg, libMgr, secureStore)
 	apiServer.RegisterRoutes(e)
+
+	// Swagger docs
+	docs.RegisterRoutes(e)
 
 	// Serve Web UI static files
 	e.Static("/", "web/dist")
