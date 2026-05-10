@@ -1,0 +1,290 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"time"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+// DB wraps sql.DB with AetherStream schema helpers
+type DB struct {
+	*sql.DB
+}
+
+// New opens SQLite with WAL mode
+func New(path string) (*DB, error) {
+	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&busy_timeout=5000")
+	if err != nil {
+		return nil, fmt.Errorf("open db: %w", err)
+	}
+	db.SetMaxOpenConns(1) // SQLite single writer
+	db.SetMaxIdleConns(1)
+	return &DB{db}, nil
+}
+
+// Migrate creates tables if not exist
+func (d *DB) Migrate() error {
+	schema := `
+CREATE TABLE IF NOT EXISTS users (
+	id TEXT PRIMARY KEY,
+	username TEXT UNIQUE NOT NULL,
+	password_hash TEXT NOT NULL,
+	role TEXT NOT NULL DEFAULT 'user',
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS libraries (
+	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL,
+	path TEXT NOT NULL,
+	media_type TEXT NOT NULL DEFAULT 'mixed',
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS items (
+	id TEXT PRIMARY KEY,
+	library_id TEXT NOT NULL REFERENCES libraries(id),
+	path TEXT NOT NULL,
+	name TEXT NOT NULL,
+	media_type TEXT NOT NULL,
+	container TEXT,
+	size_bytes INTEGER,
+	duration_seconds REAL,
+	width INTEGER,
+	height INTEGER,
+	video_codec TEXT,
+	audio_codec TEXT,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS streams (
+	id TEXT PRIMARY KEY,
+	item_id TEXT NOT NULL REFERENCES items(id),
+	user_id TEXT NOT NULL REFERENCES users(id),
+	profile TEXT NOT NULL DEFAULT 'auto',
+	bandwidth_kbps INTEGER,
+	started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	ended_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS transcode_jobs (
+	id TEXT PRIMARY KEY,
+	item_id TEXT NOT NULL REFERENCES items(id),
+	profile TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'pending',
+	progress REAL DEFAULT 0,
+	output_path TEXT,
+	started_at DATETIME,
+	completed_at DATETIME,
+	error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id),
+	device_id TEXT,
+	ip_address TEXT,
+	client TEXT,
+	bandwidth_kbps INTEGER,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_items_library ON items(library_id);
+CREATE INDEX IF NOT EXISTS idx_streams_user ON streams(user_id);
+CREATE INDEX IF NOT EXISTS idx_transcode_status ON transcode_jobs(status);
+`
+	if _, err := d.Exec(schema); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	return nil
+}
+
+// --- Users ---
+
+// CreateUser inserts a new user
+func (d *DB) CreateUser(id, username, passwordHash, role string) error {
+	_, err := d.Exec(
+		"INSERT INTO users(id, username, password_hash, role) VALUES (?, ?, ?, ?)",
+		id, username, passwordHash, role,
+	)
+	return err
+}
+
+// GetUserByUsername fetches user for auth
+func (d *DB) GetUserByUsername(username string) (id, passwordHash, role string, err error) {
+	row := d.QueryRow("SELECT id, password_hash, role FROM users WHERE username = ?", username)
+	err = row.Scan(&id, &passwordHash, &role)
+	return
+}
+
+// ListUsers returns all users
+func (d *DB) ListUsers() ([]map[string]interface{}, error) {
+	rows, err := d.Query("SELECT id, username, role, created_at FROM users")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []map[string]interface{}
+	for rows.Next() {
+		var id, username, role string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &username, &role, &createdAt); err != nil {
+			continue
+		}
+		users = append(users, map[string]interface{}{
+			"id":        id,
+			"username":  username,
+			"role":      role,
+			"createdAt": createdAt,
+		})
+	}
+	return users, nil
+}
+
+// --- Libraries ---
+
+// CreateLibrary inserts library
+func (d *DB) CreateLibrary(id, name, path, mediaType string) error {
+	_, err := d.Exec(
+		"INSERT INTO libraries(id, name, path, media_type) VALUES (?, ?, ?, ?)",
+		id, name, path, mediaType,
+	)
+	return err
+}
+
+// ListLibraries returns all libraries
+func (d *DB) ListLibraries() ([]map[string]interface{}, error) {
+	rows, err := d.Query("SELECT id, name, path, media_type, created_at FROM libraries")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var libs []map[string]interface{}
+	for rows.Next() {
+		var id, name, path, mediaType string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &name, &path, &mediaType, &createdAt); err != nil {
+			continue
+		}
+		libs = append(libs, map[string]interface{}{
+			"id":         id,
+			"name":       name,
+			"path":       path,
+			"mediaType":  mediaType,
+			"createdAt":  createdAt,
+		})
+	}
+	return libs, nil
+}
+
+// --- Items ---
+
+// CreateItem inserts media item
+func (d *DB) CreateItem(id, libraryID, path, name, mediaType, container string, sizeBytes int64, duration float64, width, height int, videoCodec, audioCodec string) error {
+	_, err := d.Exec(
+		`INSERT INTO items(id, library_id, path, name, media_type, container, size_bytes, duration_seconds, width, height, video_codec, audio_codec)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, libraryID, path, name, mediaType, container, sizeBytes, duration, width, height, videoCodec, audioCodec,
+	)
+	return err
+}
+
+// GetItemByID fetches single item
+func (d *DB) GetItemByID(id string) (map[string]interface{}, error) {
+	row := d.QueryRow(
+		`SELECT id, library_id, path, name, media_type, container, size_bytes, duration_seconds, width, height, video_codec, audio_codec, created_at
+		 FROM items WHERE id = ?`, id)
+	
+	var itemID, libID, path, name, mediaType, container, videoCodec, audioCodec string
+	var sizeBytes int64
+	var duration float64
+	var width, height int
+	var createdAt time.Time
+	
+	err := row.Scan(&itemID, &libID, &path, &name, &mediaType, &container, &sizeBytes, &duration, &width, &height, &videoCodec, &audioCodec, &createdAt)
+	if err != nil {
+		return nil, err
+	}
+	
+	return map[string]interface{}{
+		"id":             itemID,
+		"libraryId":      libID,
+		"path":           path,
+		"name":           name,
+		"mediaType":      mediaType,
+		"container":      container,
+		"sizeBytes":      sizeBytes,
+		"durationSeconds": duration,
+		"width":          width,
+		"height":         height,
+		"videoCodec":     videoCodec,
+		"audioCodec":     audioCodec,
+		"createdAt":      createdAt,
+	}, nil
+}
+
+// ListItemsByLibrary returns items in a library
+func (d *DB) ListItemsByLibrary(libraryID string) ([]map[string]interface{}, error) {
+	rows, err := d.Query(
+		`SELECT id, library_id, path, name, media_type, container, size_bytes, duration_seconds, width, height, video_codec, audio_codec, created_at
+		 FROM items WHERE library_id = ?`, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []map[string]interface{}
+	for rows.Next() {
+		var itemID, libID, path, name, mediaType, container, videoCodec, audioCodec string
+		var sizeBytes int64
+		var duration float64
+		var width, height int
+		var createdAt time.Time
+		
+		if err := rows.Scan(&itemID, &libID, &path, &name, &mediaType, &container, &sizeBytes, &duration, &width, &height, &videoCodec, &audioCodec, &createdAt); err != nil {
+			continue
+		}
+		items = append(items, map[string]interface{}{
+			"id":             itemID,
+			"libraryId":      libID,
+			"path":           path,
+			"name":           name,
+			"mediaType":      mediaType,
+			"container":      container,
+			"sizeBytes":      sizeBytes,
+			"durationSeconds": duration,
+			"width":          width,
+			"height":         height,
+			"videoCodec":     videoCodec,
+			"audioCodec":     audioCodec,
+			"createdAt":      createdAt,
+		})
+	}
+	return items, nil
+}
+
+// --- Sessions ---
+
+// CreateSession records a new streaming session
+func (d *DB) CreateSession(id, userID, deviceID, ip, client string, bandwidthKbps int) error {
+	_, err := d.Exec(
+		"INSERT INTO sessions(id, user_id, device_id, ip_address, client, bandwidth_kbps) VALUES (?, ?, ?, ?, ?, ?)",
+		id, userID, deviceID, ip, client, bandwidthKbps,
+	)
+	return err
+}
+
+// UpdateSessionBandwidth updates QoS bandwidth for session
+func (d *DB) UpdateSessionBandwidth(sessionID string, bandwidthKbps int) error {
+	_, err := d.Exec(
+		"UPDATE sessions SET bandwidth_kbps = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?",
+		bandwidthKbps, sessionID,
+	)
+	return err
+}
