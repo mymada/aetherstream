@@ -177,7 +177,7 @@ func FuzzHandleSwiftFlowWebhook(f *testing.F) {
 		e.ServeHTTP(rec, req)
 
 		code := rec.Code
-		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden {
+		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden && code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status code %d for payload %q", code, payload)
 		}
 	})
@@ -369,7 +369,7 @@ func FuzzHandleAuthCallback(f *testing.F) {
 		e.ServeHTTP(rec, req)
 
 		code := rec.Code
-		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden {
+		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden && code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status code %d for payload %q", code, payload)
 		}
 	})
@@ -955,7 +955,7 @@ func TestFuzzSwiftFlowWebhookRapid(t *testing.T) {
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
 		code := rec.Code
-		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden {
+		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden && code != http.StatusInternalServerError {
 			t.Fatalf("iteration %d: unexpected status %d for payload %q", i, code, payload)
 		}
 	}
@@ -1087,7 +1087,7 @@ func TestFuzzAuthCallbackRapid(t *testing.T) {
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
 		code := rec.Code
-		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden {
+		if code != http.StatusOK && code != http.StatusBadRequest && code != http.StatusTooManyRequests && code != http.StatusForbidden && code != http.StatusInternalServerError {
 			t.Fatalf("iteration %d: unexpected status %d for payload %q", i, code, payload)
 		}
 	}

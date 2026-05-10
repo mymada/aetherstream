@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/devuser/aetherstream/pkg/api"
 	"github.com/devuser/aetherstream/pkg/auth"
@@ -105,12 +106,11 @@ func newHarness(t *testing.T) *testHarness {
 
 func (h *testHarness) hashPassword(pw string) string {
 	// Use a low-cost bcrypt hash for test speed.
-	// We generate via a quick helper command if bcrypt module available.
-	out, err := exec.Command("python3", "-c", "import bcrypt, sys; print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(rounds=4)).decode())", pw).Output()
+	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.MinCost)
 	if err != nil {
-		return "$2a$04$abcdefghijklmnopqrstuuxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+		panic(err)
 	}
-	return strings.TrimSpace(string(out))
+	return string(hash)
 }
 
 func (h *testHarness) cleanup() {
