@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devuser/aetherstream/pkg/auth"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/crypto/acme/autocert"
@@ -273,17 +274,35 @@ func ResetBruteForce(ip, username string) {
 const sessionContextKey = "session_last_activity"
 const sessionTimeoutHeader = "X-Session-Timeout"
 
-// SessionTimeout returns middleware that tracks last activity and rejects requests
-// after idleDuration. It should be applied to protected routes.
+// SessionTimeout returns middleware that tracks last activity per user in a persistent store
+// and rejects requests after idleDuration. It should be applied to protected routes.
 func SessionTimeout(idleDuration time.Duration) echo.MiddlewareFunc {
+	sessions := make(map[string]time.Time)
+	var mu sync.RWMutex
+	
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			// Get user ID from auth context
+			claims := auth.GetUser(c)
+			if claims == nil {
+				return next(c) // No auth, skip timeout
+			}
+			
+			userID := claims.UserID
 			now := time.Now()
-			last, ok := c.Get(sessionContextKey).(time.Time)
+			
+			mu.RLock()
+			last, ok := sessions[userID]
+			mu.RUnlock()
+			
 			if ok && now.Sub(last) > idleDuration {
 				return echo.NewHTTPError(http.StatusUnauthorized, "session expired due to inactivity")
 			}
-			c.Set(sessionContextKey, now)
+			
+			mu.Lock()
+			sessions[userID] = now
+			mu.Unlock()
+			
 			// Inform client how many seconds remain
 			remaining := int(idleDuration.Seconds())
 			c.Response().Header().Set(sessionTimeoutHeader, fmt.Sprintf("%d", remaining))
@@ -444,7 +463,7 @@ func isPrivateIP(ip string) bool {
 // CORSMiddleware returns Echo CORS middleware configured for AetherStream Web UI
 func CORSMiddleware() echo.MiddlewareFunc {
 	return middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "https://localhost:5173", "https://localhost:8080", "*"},
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "https://localhost:5173", "https://localhost:8080"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch},
 		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestedWith},
 		ExposeHeaders:    []string{echo.HeaderContentLength, echo.HeaderContentType},

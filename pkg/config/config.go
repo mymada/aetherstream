@@ -1,9 +1,12 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
@@ -82,11 +85,9 @@ func Load(path string) (*Config, error) {
 	if secret := os.Getenv("AETHERSTREAM_AUTH_SECRET"); secret != "" {
 		cfg.Auth.Secret = secret
 	} else {
-		// Generate a default secret for Docker/demo environments
-		cfg.Auth.Secret = os.Getenv("AETHERSTREAM_AUTH_SECRET")
-		if cfg.Auth.Secret == "" {
-			cfg.Auth.Secret = "aetherstream-default-secret-key-for-docker-environments-only-32chars"
-		}
+		// Generate a random secret for Docker/demo environments
+		// In production, AETHERSTREAM_AUTH_SECRET MUST be set
+		cfg.Auth.Secret = generateRandomSecret(32)
 	}
 	if ttl := os.Getenv("AETHERSTREAM_AUTH_TOKEN_TTL"); ttl != "" {
 		if t, err := strconv.Atoi(ttl); err == nil {
@@ -146,4 +147,12 @@ func Defaults() *Config {
 			HWAccel:   "auto",
 		},
 	}
+}
+
+func generateRandomSecret(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return fmt.Sprintf("aetherstream-fallback-%d-%d", os.Getpid(), time.Now().UnixNano())
+	}
+	return hex.EncodeToString(bytes)
 }

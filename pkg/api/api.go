@@ -3,6 +3,8 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -328,11 +330,23 @@ func (s *Server) handleGetSubtitle(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
 	path, _ := item["path"].(string)
+	
+	// Validate subtitle language parameter (prevent path traversal)
+	if strings.Contains(lang, "..") || strings.Contains(lang, "/") || strings.Contains(lang, "\\") {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid language parameter")
+	}
+	
 	// Extract subtitle to temp file and serve
 	subPath, err := probe.ExtractSubtitleToFile(path, lang)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "subtitle not found")
 	}
+	
+	// Validate the returned path is within expected directory
+	if !strings.HasPrefix(subPath, os.TempDir()) && !strings.HasPrefix(subPath, "./thumbnails") {
+		return echo.NewHTTPError(http.StatusInternalServerError, "invalid subtitle path")
+	}
+	
 	return c.File(subPath)
 }
 
