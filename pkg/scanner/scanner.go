@@ -173,7 +173,7 @@ func (s *Scanner) watchLoop() {
 					continue
 				}
 				if info.IsDir() {
-					s.watcher.Add(event.Name)
+					_ = s.watcher.Add(event.Name)
 					continue
 				}
 

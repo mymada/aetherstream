@@ -221,7 +221,7 @@ func (t *Transcoder) Transcode(itemID string, profiles []string) error {
 		for _, profileName := range profiles {
 			profile := encoder.GetProfileByName(profileName)
 			outputDir := filepath.Join(t.mediaRoot, "transcodes", itemID, profileName)
-			os.MkdirAll(outputDir, 0750)
+			_ = os.MkdirAll(outputDir, 0750)
 
 			// Build FFmpeg HLS command
 			args := encoder.BuildHLSCommand(inputPath, outputDir, profile, 4, "none")

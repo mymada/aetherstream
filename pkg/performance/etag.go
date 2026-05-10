@@ -81,7 +81,6 @@ func ETagMiddleware(cache cache.Cache) echo.MiddlewareFunc {
 					}
 				}
 			}
-
 			if match {
 				c.Response().Header().Set("ETag", etag)
 				c.Response().Header().Set("Last-Modified", lastMod)
@@ -149,7 +148,7 @@ func (r *etagRecorder) flush() {
 		r.original.WriteHeader(r.status)
 	}
 	if r.body.Len() > 0 {
-		io.WriteString(r.original, r.body.String())
+		_, _ = io.WriteString(r.original, r.body.String())
 	}
 }
 
@@ -162,7 +161,7 @@ var etagPool = sync.Pool{
 func computeETag(data []byte) string {
 	h := etagPool.Get().(hash.Hash)
 	h.Reset()
-	h.Write(data)
+	_, _ = h.Write(data)
 	sum := h.Sum(nil)
 	etagPool.Put(h)
 	return fmt.Sprintf("\"%s\"", hex.EncodeToString(sum)[:16])

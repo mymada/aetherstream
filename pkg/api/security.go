@@ -120,6 +120,7 @@ func (w *secureCookieResponseWriter) WriteHeader(code int) {
 		w.secureCookies()
 	}
 	w.ResponseWriter.WriteHeader(code)
+	return
 }
 
 func (w *secureCookieResponseWriter) Write(b []byte) (int, error) {

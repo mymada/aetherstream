@@ -118,6 +118,6 @@ func (r *responseRecorder) flush() {
 		r.original.WriteHeader(r.status)
 	}
 	if r.body.Len() > 0 {
-		io.WriteString(r.original, r.body.String())
+		_, _ = io.WriteString(r.original, r.body.String())
 	}
 }
