@@ -93,6 +93,12 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	api.GET("/items/:id/subtitles", s.handleListSubtitles)
 	api.GET("/items/:id/subtitles/:lang", s.handleGetSubtitle)
 	api.GET("/items/:id/thumbnails/:type", s.handleGetThumbnail)
+	api.POST("/items/:id/progress", s.handleSaveProgress)
+	api.GET("/items/:id/progress", s.handleGetProgress)
+	api.POST("/items/:id/watched", s.handleMarkWatched)
+
+	// Users playback reporting
+	api.GET("/users/:id/playback-reporting", s.handlePlaybackReporting)
 
 	// Search
 	api.GET("/search", s.handleSearch)
@@ -557,4 +563,76 @@ func (s *Server) handleGetThumbnail(c echo.Context) error {
 
 	thumbPath := s.thumbSvc.Path(itemID, t)
 	return c.File(thumbPath)
+}
+
+// --- Playback Reporting Handlers ---
+
+func (s *Server) handleSaveProgress(c echo.Context) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	itemID := c.Param("id")
+	var req struct {
+		PositionSeconds float64 `json:"position_seconds"`
+		DurationSeconds float64 `json:"duration_seconds"`
+		PercentComplete float64 `json:"percent_complete"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+	if err := s.db.SavePlaybackProgress(user.UserID, itemID, req.PositionSeconds, req.DurationSeconds, req.PercentComplete); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (s *Server) handleGetProgress(c echo.Context) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	itemID := c.Param("id")
+	progress, err := s.db.GetPlaybackProgress(user.UserID, itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "playback progress not found")
+	}
+	return c.JSON(http.StatusOK, progress)
+}
+
+func (s *Server) handleMarkWatched(c echo.Context) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	itemID := c.Param("id")
+	var req struct {
+		PositionSeconds float64 `json:"position_seconds"`
+		DurationSeconds float64 `json:"duration_seconds"`
+		Watched         bool    `json:"watched"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+	if err := s.db.SaveWatchHistory(user.UserID, itemID, req.PositionSeconds, req.DurationSeconds, req.Watched); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (s *Server) handlePlaybackReporting(c echo.Context) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	userID := c.Param("id")
+	// Users can only view their own playback reporting unless admin
+	if user.UserID != userID && user.Role != "admin" {
+		return echo.NewHTTPError(http.StatusForbidden, "forbidden")
+	}
+	report, err := s.db.GetPlaybackReporting(userID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+	}
+	return c.JSON(http.StatusOK, report)
 }

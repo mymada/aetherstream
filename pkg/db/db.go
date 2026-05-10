@@ -149,23 +149,9 @@ CREATE TABLE IF NOT EXISTS items_fts (
 );
 `
 		if _, err2 := d.Exec(fallbackSchema); err2 != nil {
-			return nil
+			return fmt.Errorf("migrate items_fts fallback: %w", err2)
 		}
-		return nil
-	}
-
-	// Also create a plain fallback table so search works when FTS5 is unavailable
-	fallbackSchema := `
-CREATE TABLE IF NOT EXISTS items_fts (
-	item_id TEXT PRIMARY KEY,
-	title TEXT,
-	description TEXT,
-	actors TEXT,
-	director TEXT
-);
-`
-	if _, err := d.Exec(fallbackSchema); err != nil {
-		return nil
+		// Continue with rest of migrations even if FTS5 unavailable
 	}
 
 	// Trickplay images
@@ -238,6 +224,44 @@ CREATE INDEX IF NOT EXISTS idx_auto_collections_group ON auto_collections(group_
 `
 	if _, err := d.Exec(autoColSchema); err != nil {
 		return fmt.Errorf("migrate auto_collections: %w", err)
+	}
+
+	// Playback progress (resume points)
+	playbackSchema := `
+CREATE TABLE IF NOT EXISTS playback_progress (
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	position_seconds REAL NOT NULL DEFAULT 0,
+	duration_seconds REAL NOT NULL DEFAULT 0,
+	percent_complete REAL NOT NULL DEFAULT 0,
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (user_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_playback_item ON playback_progress(item_id);
+CREATE INDEX IF NOT EXISTS idx_playback_updated ON playback_progress(updated_at);
+`
+	if _, err := d.Exec(playbackSchema); err != nil {
+		return fmt.Errorf("migrate playback_progress: %w", err)
+	}
+
+	// Watch history
+	watchHistorySchema := `
+CREATE TABLE IF NOT EXISTS watch_history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	position_seconds REAL NOT NULL DEFAULT 0,
+	duration_seconds REAL NOT NULL DEFAULT 0,
+	watched INTEGER NOT NULL DEFAULT 0,
+	watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(user_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_watch_history_user ON watch_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_watch_history_item ON watch_history(item_id);
+CREATE INDEX IF NOT EXISTS idx_watch_history_watched_at ON watch_history(watched_at);
+`
+	if _, err := d.Exec(watchHistorySchema); err != nil {
+		return fmt.Errorf("migrate watch_history: %w", err)
 	}
 
 	return nil
@@ -618,4 +642,161 @@ func (d *DB) SearchItemsFTS(query, mediaType string, limit int) ([]Item, error) 
 		items = append(items, it)
 	}
 	return items, nil
+}
+
+// --- Playback Progress ---
+
+// SavePlaybackProgress upserts the resume point for a user/item pair.
+func (d *DB) SavePlaybackProgress(userID, itemID string, positionSeconds, durationSeconds, percentComplete float64) error {
+	_, err := d.Exec(`
+		INSERT INTO playback_progress(user_id, item_id, position_seconds, duration_seconds, percent_complete, updated_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(user_id, item_id) DO UPDATE SET
+			position_seconds = excluded.position_seconds,
+			duration_seconds = excluded.duration_seconds,
+			percent_complete = excluded.percent_complete,
+			updated_at = CURRENT_TIMESTAMP`,
+		userID, itemID, positionSeconds, durationSeconds, percentComplete,
+	)
+	return err
+}
+
+// GetPlaybackProgress returns the resume point for a user/item pair.
+func (d *DB) GetPlaybackProgress(userID, itemID string) (*PlaybackProgress, error) {
+	row := d.QueryRow(`
+		SELECT user_id, item_id, position_seconds, duration_seconds, percent_complete, updated_at
+		FROM playback_progress
+		WHERE user_id = ? AND item_id = ?`, userID, itemID)
+	var p PlaybackProgress
+	err := row.Scan(&p.UserID, &p.ItemID, &p.PositionSeconds, &p.DurationSeconds, &p.PercentComplete, &p.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("playback progress not found")
+		}
+		return nil, err
+	}
+	return &p, nil
+}
+
+// DeletePlaybackProgress removes the resume point for a user/item pair.
+func (d *DB) DeletePlaybackProgress(userID, itemID string) error {
+	_, err := d.Exec("DELETE FROM playback_progress WHERE user_id = ? AND item_id = ?", userID, itemID)
+	return err
+}
+
+// --- Watch History ---
+
+// SaveWatchHistory upserts a watch record for a user/item pair.
+func (d *DB) SaveWatchHistory(userID, itemID string, positionSeconds, durationSeconds float64, watched bool) error {
+	watchedInt := 0
+	if watched {
+		watchedInt = 1
+	}
+	_, err := d.Exec(`
+		INSERT INTO watch_history(user_id, item_id, position_seconds, duration_seconds, watched, watched_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(user_id, item_id) DO UPDATE SET
+			position_seconds = excluded.position_seconds,
+			duration_seconds = excluded.duration_seconds,
+			watched = excluded.watched,
+			watched_at = CURRENT_TIMESTAMP`,
+		userID, itemID, positionSeconds, durationSeconds, watchedInt,
+	)
+	return err
+}
+
+// GetWatchHistory returns the watch record for a user/item pair.
+func (d *DB) GetWatchHistory(userID, itemID string) (*WatchHistory, error) {
+	row := d.QueryRow(`
+		SELECT id, user_id, item_id, position_seconds, duration_seconds, watched, watched_at
+		FROM watch_history
+		WHERE user_id = ? AND item_id = ?`, userID, itemID)
+	var h WatchHistory
+	var watchedInt int
+	err := row.Scan(&h.ID, &h.UserID, &h.ItemID, &h.PositionSeconds, &h.DurationSeconds, &watchedInt, &h.WatchedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("watch history not found")
+		}
+		return nil, err
+	}
+	h.Watched = watchedInt != 0
+	return &h, nil
+}
+
+// ListWatchHistoryByUser returns recent watch history for a user.
+func (d *DB) ListWatchHistoryByUser(userID string, limit int) ([]WatchHistory, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := d.Query(`
+		SELECT id, user_id, item_id, position_seconds, duration_seconds, watched, watched_at
+		FROM watch_history
+		WHERE user_id = ?
+		ORDER BY watched_at DESC
+		LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []WatchHistory
+	for rows.Next() {
+		var h WatchHistory
+		var watchedInt int
+		if err := rows.Scan(&h.ID, &h.UserID, &h.ItemID, &h.PositionSeconds, &h.DurationSeconds, &watchedInt, &h.WatchedAt); err != nil {
+			continue
+		}
+		h.Watched = watchedInt != 0
+		history = append(history, h)
+	}
+	return history, nil
+}
+
+// GetPlaybackReporting returns combined playback progress + watch history for a user.
+func (d *DB) GetPlaybackReporting(userID string) (map[string]interface{}, error) {
+	progressRows, err := d.Query(`
+		SELECT user_id, item_id, position_seconds, duration_seconds, percent_complete, updated_at
+		FROM playback_progress
+		WHERE user_id = ?
+		ORDER BY updated_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer progressRows.Close()
+
+	var progress []PlaybackProgress
+	for progressRows.Next() {
+		var p PlaybackProgress
+		if err := progressRows.Scan(&p.UserID, &p.ItemID, &p.PositionSeconds, &p.DurationSeconds, &p.PercentComplete, &p.UpdatedAt); err != nil {
+			continue
+		}
+		progress = append(progress, p)
+	}
+
+	historyRows, err := d.Query(`
+		SELECT id, user_id, item_id, position_seconds, duration_seconds, watched, watched_at
+		FROM watch_history
+		WHERE user_id = ?
+		ORDER BY watched_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer historyRows.Close()
+
+	var history []WatchHistory
+	for historyRows.Next() {
+		var h WatchHistory
+		var watchedInt int
+		if err := historyRows.Scan(&h.ID, &h.UserID, &h.ItemID, &h.PositionSeconds, &h.DurationSeconds, &watchedInt, &h.WatchedAt); err != nil {
+			continue
+		}
+		h.Watched = watchedInt != 0
+		history = append(history, h)
+	}
+
+	return map[string]interface{}{
+		"playbackProgress": progress,
+		"watchHistory":     history,
+	}, nil
 }

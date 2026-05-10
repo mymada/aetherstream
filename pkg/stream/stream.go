@@ -10,10 +10,11 @@ import (
 	"sync"
 
 	"github.com/labstack/echo/v4"
+	"github.com/devuser/aetherstream/pkg/db"
+	"github.com/devuser/aetherstream/pkg/dash"
 	"github.com/devuser/aetherstream/pkg/encoder"
 	"github.com/devuser/aetherstream/pkg/hls"
 	"github.com/devuser/aetherstream/pkg/probe"
-	"github.com/devuser/aetherstream/pkg/db"
 )
 
 // Server handles HTTP streaming endpoints
@@ -42,7 +43,10 @@ func (s *Server) RegisterRoutes(e *echo.Echo, authMiddleware echo.MiddlewareFunc
 	g.GET("/:id/hls/master.m3u8", s.handleHLSMaster)
 	g.GET("/:id/hls/:profile/playlist.m3u8", s.handleHLSVariant)
 	g.GET("/:id/hls/:profile/:segment", s.handleHLSSegment)
+	g.GET("/:id/dash/manifest.mpd", s.handleDASHManifest)
+	g.GET("/:id/dash/:profile/:file", s.handleDASHSegment)
 	g.GET("/:id/probe", s.handleProbe)
+	g.POST("/:id/burnin", s.handleBurnIn)
 }
 
 // handleDirectStream serves the original file (direct play)
@@ -163,6 +167,123 @@ func (s *Server) handleProbe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, info)
+}
+
+// handleDASHManifest serves the DASH MPD manifest
+func (s *Server) handleDASHManifest(c echo.Context) error {
+	itemID := c.Param("id")
+
+	item, err := s.db.GetItemByID(itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+
+	outputDir := filepath.Join(s.mediaRoot, "transcodes", itemID)
+
+	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
+		go s.transcoder.Transcode(itemID, []string{"mobile", "tablet"})
+		return c.String(http.StatusOK, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\" profiles=\"urn:mpeg:dash:profile:isoff-on-demand:2011\" mediaPresentationDuration=\"PT0S\"><Period id=\"1\"><AdaptationSet id=\"waiting\" contentType=\"text\"><Representation id=\"waiting\" bandwidth=\"1000\"><BaseURL># Waiting for transcode...</BaseURL></Representation></AdaptationSet></Period></MPD>")
+	}
+
+	profiles := s.discoverProfiles(outputDir)
+	if len(profiles) == 0 {
+		return echo.NewHTTPError(http.StatusNotFound, "no transcode profiles available")
+	}
+
+	var videoReps []dash.RepresentationInfo
+	var audioReps []dash.RepresentationInfo
+
+	for _, profileName := range profiles {
+		profile := dash.GetProfileByName(profileName)
+		profile.BaseURL = profileName + "/"
+		if profile.SegmentTemplate != nil {
+			profile.SegmentTemplate.Initialization = profileName + "/" + profile.SegmentTemplate.Initialization
+			profile.SegmentTemplate.MediaPattern = profileName + "/" + profile.SegmentTemplate.MediaPattern
+		}
+
+		if strings.Contains(profile.MimeType, "audio") {
+			audioReps = append(audioReps, profile)
+		} else {
+			videoReps = append(videoReps, profile)
+		}
+	}
+
+	mpd, err := dash.BuildMPDForItem(itemID, item.DurationSeconds, "", videoReps)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to generate manifest")
+	}
+
+	if len(audioReps) > 0 && len(mpd.Periods) > 0 {
+		dash.AddAudioAdaptationSet(&mpd.Periods[0], "und", audioReps)
+	}
+
+	manifestXML, err := mpd.ToXML()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to serialize manifest")
+	}
+
+	c.Response().Header().Set("Content-Type", "application/dash+xml")
+	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
+	return c.String(http.StatusOK, manifestXML)
+}
+
+// handleDASHSegment serves DASH segments
+func (s *Server) handleDASHSegment(c echo.Context) error {
+	itemID := c.Param("id")
+	profile := c.Param("profile")
+	file := c.Param("file")
+
+	if strings.Contains(file, "..") || strings.Contains(file, "/") || strings.Contains(file, "\\") {
+		return echo.NewHTTPError(http.StatusForbidden, "invalid file name")
+	}
+
+	segmentPath := filepath.Join(s.mediaRoot, "transcodes", itemID, profile, file)
+
+	cleanSegment := filepath.Clean(segmentPath)
+	cleanRoot := filepath.Clean(filepath.Join(s.mediaRoot, "transcodes"))
+	if !strings.HasPrefix(cleanSegment, cleanRoot+string(filepath.Separator)) {
+		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
+	}
+
+	if _, err := os.Stat(cleanSegment); err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "segment not found")
+	}
+
+	contentType := "video/mp2t"
+	c.Response().Header().Set("Content-Type", contentType)
+	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
+	return c.File(cleanSegment)
+}
+
+// handleBurnIn triggers subtitle burn-in for an item
+func (s *Server) handleBurnIn(c echo.Context) error {
+	itemID := c.Param("id")
+
+	item, err := s.db.GetItemByID(itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+
+	var req BurnInRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+	req.ItemID = itemID
+
+	if err := ValidateBurnInRequest(req, s.mediaRoot); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if req.Profile == "" {
+		req.Profile = "original"
+	}
+
+	result, err := BurnIn(item.Path, req.Language, s.mediaRoot, req.Profile, req.HWAccel)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(http.StatusOK, result)
 }
 
 // discoverProfiles scans transcode output directory for available profiles
