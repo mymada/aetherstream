@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	"github.com/devuser/aetherstream/pkg/db"
 )
 
 func TestHandleProbe(t *testing.T) {
@@ -24,7 +24,9 @@ func TestHandleProbe(t *testing.T) {
 	assert.NoError(t, err)
 
 	srv := NewServer(dbConn, "/tmp/media")
-	srv.RegisterRoutes(e, nil)
+	srv.RegisterRoutes(e, func(next echo.HandlerFunc) echo.HandlerFunc {
+		return next
+	})
 
 	// Probe endpoint
 	req := httptest.NewRequest(http.MethodGet, "/videos/test-1/probe", nil)
@@ -47,7 +49,9 @@ func TestHLSMasterNotFound(t *testing.T) {
 	assert.NoError(t, err)
 
 	srv := NewServer(dbConn, "/tmp/media")
-	srv.RegisterRoutes(e, nil)
+	srv.RegisterRoutes(e, func(next echo.HandlerFunc) echo.HandlerFunc {
+		return next
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/videos/test-2/hls/master.m3u8", nil)
 	rec := httptest.NewRecorder()
@@ -66,7 +70,9 @@ func TestDirectStreamNotFound(t *testing.T) {
 	dbConn.Migrate()
 
 	srv := NewServer(dbConn, "/tmp/media")
-	srv.RegisterRoutes(e, nil)
+	srv.RegisterRoutes(e, func(next echo.HandlerFunc) echo.HandlerFunc {
+		return next
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/videos/nonexistent/stream", nil)
 	rec := httptest.NewRecorder()

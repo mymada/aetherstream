@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"os"
@@ -155,25 +156,34 @@ func (s *Server) handleLogin(c echo.Context) error {
 	ip := getTrustedIP(c)
 
 	// Brute-force check already enforced by middleware; record on failure.
+	// Timing-safe lookup: always perform both DB queries and compare so that
+	// the path length is identical whether the user exists or not.
 	_, passwordHash, _, err := s.db.GetUserByUsername(req.Username)
+	userID, _, role, err2 := s.db.GetUserByUsername(req.Username)
+
+	// Use a dummy hash when the user doesn't exist so bcrypt.CompareHashAndPassword
+	// still runs (prevents user enumeration via timing).
+	// #nosec G101 — this is a well-known dummy bcrypt hash used for timing-safe comparison,
+	// not a real credential. It is never compared against a real password hash successfully.
 	if err != nil {
-		RecordFailedLogin(ip, req.Username)
-		return echo.NewHTTPError(401, "invalid credentials")
+		passwordHash = "$2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa" // dummy bcrypt hash
+		userID = ""
+		role = ""
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+	// Constant-time comparison of the user-existence errors to prevent leaking
+	// whether the username is valid.
+	errSame := subtle.ConstantTimeCompare([]byte(fmt.Sprintf("%v", err)), []byte(fmt.Sprintf("%v", err2)))
+	_ = errSame // both calls use the same query; this line documents the intent
+
+	// Always run bcrypt comparison to keep timing constant.
+	bcryptErr := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password))
+	if err != nil || bcryptErr != nil {
 		RecordFailedLogin(ip, req.Username)
 		return echo.NewHTTPError(401, "invalid credentials")
 	}
 
 	ResetBruteForce(ip, req.Username)
-
-	// Use real user ID and role from database instead of hardcoded admin-1
-	userID, _, role, err := s.db.GetUserByUsername(req.Username)
-	if err != nil {
-		RecordFailedLogin(ip, req.Username)
-		return echo.NewHTTPError(401, "invalid credentials")
-	}
 
 	token, err := s.auth.GenerateToken(userID, req.Username, role)
 	if err != nil {

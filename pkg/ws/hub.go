@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devuser/aetherstream/pkg/auth"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
@@ -42,7 +43,16 @@ func HandleWebSocket(c echo.Context, database *db.DB) error {
 		return err
 	}
 
-	userID := c.QueryParam("user_id")
+	// Reject WebSocket connections that try to pass a token via query params.
+	if c.QueryParam("token") != "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "token must not be passed via query parameters")
+	}
+
+	claims := auth.GetUser(c)
+	if claims == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	userID := claims.UserID
 	if userID == "" {
 		userID = "anonymous"
 	}

@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -85,9 +86,9 @@ func Load(path string) (*Config, error) {
 	if secret := os.Getenv("AETHERSTREAM_AUTH_SECRET"); secret != "" {
 		cfg.Auth.Secret = secret
 	} else {
-		// Generate a random secret for Docker/demo environments
-		// In production, AETHERSTREAM_AUTH_SECRET MUST be set
-		cfg.Auth.Secret = generateRandomSecret(32)
+		// In production, AETHERSTREAM_AUTH_SECRET MUST be set.
+		// The application refuses to start without an explicit secret.
+		return nil, errors.New("AETHERSTREAM_AUTH_SECRET environment variable is required")
 	}
 	if ttl := os.Getenv("AETHERSTREAM_AUTH_TOKEN_TTL"); ttl != "" {
 		if t, err := strconv.Atoi(ttl); err == nil {

@@ -236,6 +236,11 @@ func BruteForceProtection() echo.MiddlewareFunc {
 				return next(c)
 			}
 			ip := getTrustedIP(c)
+			// Strip port if present for consistent keying
+			host, _, err := net.SplitHostPort(ip)
+			if err == nil {
+				ip = host
+			}
 			ipKey := "ip:" + ip
 			if !globalBruteForce.allowed(ipKey) {
 				return echo.NewHTTPError(http.StatusTooManyRequests, "too many failed attempts from this IP")

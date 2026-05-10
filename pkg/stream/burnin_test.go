@@ -49,7 +49,9 @@ func TestBurnInHandlerNotFound(t *testing.T) {
 	dbConn.Migrate()
 
 	srv := NewServer(dbConn, "/tmp/media")
-	srv.RegisterRoutes(e, nil)
+	srv.RegisterRoutes(e, func(next echo.HandlerFunc) echo.HandlerFunc {
+		return next
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/videos/test-1/burnin", nil)
 	rec := httptest.NewRecorder()
@@ -69,7 +71,9 @@ func TestBurnInHandlerMissingFields(t *testing.T) {
 	_ = dbConn.CreateItem("test-burn", "lib-1", "/tmp/nonexistent.mp4", "Test", "video", ".mp4", 0, 0, 0, 0, "", "")
 
 	srv := NewServer(dbConn, "/tmp/media")
-	srv.RegisterRoutes(e, nil)
+	srv.RegisterRoutes(e, func(next echo.HandlerFunc) echo.HandlerFunc {
+		return next
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/videos/test-burn/burnin", nil)
 	rec := httptest.NewRecorder()

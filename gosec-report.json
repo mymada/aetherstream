@@ -3,8 +3,8 @@
 	"Issues": [],
 	"Stats": {
 		"files": 70,
-		"lines": 14653,
-		"nosec": 27,
+		"lines": 14680,
+		"nosec": 28,
 		"found": 0
 	},
 	"GosecVersion": "dev"

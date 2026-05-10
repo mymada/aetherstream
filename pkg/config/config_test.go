@@ -16,6 +16,8 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestLoadMissingFile(t *testing.T) {
+	os.Setenv("AETHERSTREAM_AUTH_SECRET", "test-secret-32-chars-long!!")
+	defer os.Unsetenv("AETHERSTREAM_AUTH_SECRET")
 	cfg, err := Load("/nonexistent/config.yaml")
 	if err != nil {
 		t.Fatalf("expected no error for missing file, got %v", err)

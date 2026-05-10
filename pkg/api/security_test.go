@@ -131,6 +131,12 @@ func TestBruteForceProtection(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		RecordFailedLogin(ip, "alice")
 	}
+	// Ensure the lockout delay has been computed and is in the future
+	globalBruteForce.mu.RLock()
+	attempt := globalBruteForce.attempts["ip:"+ip]
+	globalBruteForce.mu.RUnlock()
+	require.NotNil(t, attempt)
+	require.True(t, time.Now().Before(attempt.lockedUntil), "expected lockout to be active")
 
 	req2 := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
 	req2.RemoteAddr = ip + ":1234"

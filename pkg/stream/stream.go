@@ -35,10 +35,11 @@ func NewServer(database *db.DB, mediaRoot string) *Server {
 
 	// RegisterRoutes sets up streaming routes (protected by auth middleware)
 func (s *Server) RegisterRoutes(e *echo.Echo, authMiddleware echo.MiddlewareFunc) {
-	g := e.Group("/videos")
-	if authMiddleware != nil {
-		g.Use(authMiddleware)
+	if authMiddleware == nil {
+		panic("stream.RegisterRoutes: authMiddleware is required and cannot be nil")
 	}
+	g := e.Group("/videos")
+	g.Use(authMiddleware)
 	g.GET("/:id/stream", s.handleDirectStream)
 	g.GET("/:id/hls/master.m3u8", s.handleHLSMaster)
 	g.GET("/:id/hls/:profile/playlist.m3u8", s.handleHLSVariant)
