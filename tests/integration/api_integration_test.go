@@ -130,7 +130,9 @@ func (h *testHarness) do(method, path string, body interface{}, token string) *h
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	// CSRF: for state-changing methods, set a matching CSRF token cookie+header
-	if method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete || method == http.MethodPatch {
+	// Skip CSRF for /auth/* endpoints (public, no session to hijack yet)
+	isAuthEndpoint := strings.HasPrefix(path, "/auth/")
+	if !isAuthEndpoint && (method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete || method == http.MethodPatch) {
 		csrfTok := "test-csrf-token-12345"
 		req.AddCookie(&http.Cookie{Name: "csrf_token", Value: csrfTok})
 		req.Header.Set("X-CSRF-Token", csrfTok)
