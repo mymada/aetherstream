@@ -93,9 +93,34 @@ CREATE TABLE IF NOT EXISTS sessions (
 	last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS collections (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id),
+	name TEXT NOT NULL,
+	collection_type TEXT NOT NULL DEFAULT 'collection',
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS collection_items (
+	collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+	item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (collection_id, item_id)
+);
+
+CREATE TABLE IF NOT EXISTS activity_log (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id TEXT,
+	action TEXT NOT NULL,
+	details TEXT,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_items_library ON items(library_id);
 CREATE INDEX IF NOT EXISTS idx_streams_user ON streams(user_id);
 CREATE INDEX IF NOT EXISTS idx_transcode_status ON transcode_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_collection_user ON collections(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_log(user_id);
 `
 	if _, err := d.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -287,4 +312,155 @@ func (d *DB) UpdateSessionBandwidth(sessionID string, bandwidthKbps int) error {
 		bandwidthKbps, sessionID,
 	)
 	return err
+}
+
+// --- Users (extended) ---
+
+// UpdateUserRole changes user role
+func (d *DB) UpdateUserRole(id, role string) error {
+	_, err := d.Exec("UPDATE users SET role = ? WHERE id = ?", role, id)
+	return err
+}
+
+// DeleteUser removes a user
+func (d *DB) DeleteUser(id string) error {
+	_, err := d.Exec("DELETE FROM users WHERE id = ?", id)
+	return err
+}
+
+// --- Collections ---
+
+// CreateCollection inserts a new collection/playlist
+func (d *DB) CreateCollection(id, userID, name, colType string) error {
+	_, err := d.Exec(
+		"INSERT INTO collections(id, user_id, name, collection_type) VALUES (?, ?, ?, ?)",
+		id, userID, name, colType,
+	)
+	return err
+}
+
+// ListCollections returns collections for a user
+func (d *DB) ListCollections(userID string) ([]map[string]interface{}, error) {
+	rows, err := d.Query("SELECT id, name, collection_type, created_at FROM collections WHERE user_id = ?", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cols []map[string]interface{}
+	for rows.Next() {
+		var id, name, colType string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &name, &colType, &createdAt); err != nil {
+			continue
+		}
+		cols = append(cols, map[string]interface{}{
+			"id":   id,
+			"name": name,
+			"type": colType,
+			"createdAt": createdAt,
+		})
+	}
+	return cols, nil
+}
+
+// GetCollectionWithItems returns collection + items
+func (d *DB) GetCollectionWithItems(colID string) (map[string]interface{}, []map[string]interface{}, error) {
+	row := d.QueryRow("SELECT id, user_id, name, collection_type, created_at FROM collections WHERE id = ?", colID)
+	var id, userID, name, colType string
+	var createdAt time.Time
+	if err := row.Scan(&id, &userID, &name, &colType, &createdAt); err != nil {
+		return nil, nil, err
+	}
+	col := map[string]interface{}{
+		"id":   id,
+		"userId": userID,
+		"name": name,
+		"type": colType,
+		"createdAt": createdAt,
+	}
+
+	rows, err := d.Query(`
+		SELECT i.id, i.name, i.media_type, i.path
+		FROM items i
+		JOIN collection_items ci ON i.id = ci.item_id
+		WHERE ci.collection_id = ?`, colID)
+	if err != nil {
+		return col, nil, err
+	}
+	defer rows.Close()
+
+	var items []map[string]interface{}
+	for rows.Next() {
+		var itemID, itemName, mediaType, path string
+		if err := rows.Scan(&itemID, &itemName, &mediaType, &path); err != nil {
+			continue
+		}
+		items = append(items, map[string]interface{}{
+			"id":       itemID,
+			"name":     itemName,
+			"mediaType": mediaType,
+			"path":     path,
+		})
+	}
+	return col, items, nil
+}
+
+// AddItemToCollection adds item to collection
+func (d *DB) AddItemToCollection(colID, itemID string) error {
+	_, err := d.Exec(
+		"INSERT OR IGNORE INTO collection_items(collection_id, item_id) VALUES (?, ?)",
+		colID, itemID,
+	)
+	return err
+}
+
+// RemoveItemFromCollection removes item from collection
+func (d *DB) RemoveItemFromCollection(colID, itemID string) error {
+	_, err := d.Exec(
+		"DELETE FROM collection_items WHERE collection_id = ? AND item_id = ?",
+		colID, itemID,
+	)
+	return err
+}
+
+// --- Activity Log ---
+
+// LogActivity records an action
+func (d *DB) LogActivity(userID, action, details string) error {
+	_, err := d.Exec(
+		"INSERT INTO activity_log(user_id, action, details) VALUES (?, ?, ?)",
+		userID, action, details,
+	)
+	return err
+}
+
+// ListActivity returns recent activity
+func (d *DB) ListActivity(limit int) ([]map[string]interface{}, error) {
+	rows, err := d.Query(
+		"SELECT id, user_id, action, details, created_at FROM activity_log ORDER BY created_at DESC LIMIT ?",
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var acts []map[string]interface{}
+	for rows.Next() {
+		var id int
+		var userID, action, details string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &userID, &action, &details, &createdAt); err != nil {
+			continue
+		}
+		acts = append(acts, map[string]interface{}{
+			"id":        id,
+			"userId":    userID,
+			"action":    action,
+			"details":   details,
+			"createdAt": createdAt,
+		})
+	}
+	return acts, nil
 }

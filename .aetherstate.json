@@ -8,9 +8,9 @@
     "phase5_polish": "pending"
   },
   "last_audit": null,
-  "health_score": 4.8217,
+  "health_score": 5.3847000000000005,
   "build_ok": true,
   "tests_ok": true,
-  "last_run": "2026-05-10T05:00:28.262272",
+  "last_run": "2026-05-10T06:00:51.833294",
   "crashes": []
 }

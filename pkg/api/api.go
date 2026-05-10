@@ -11,8 +11,11 @@ import (
 	"github.com/devuser/aetherstream/pkg/config"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/library"
+	"github.com/devuser/aetherstream/pkg/probe"
 	"github.com/devuser/aetherstream/pkg/securestore"
 	"github.com/devuser/aetherstream/pkg/stream"
+	"github.com/devuser/aetherstream/pkg/ws"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -59,10 +62,6 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	api.GET("/users", s.handleListUsers)
 	api.GET("/users/:id", s.handleGetUser)
 
-	// Items
-	api.GET("/items", s.handleListItems)
-	api.GET("/items/:id", s.handleGetItem)
-
 	// Libraries
 	api.GET("/libraries", s.handleListLibraries)
 	api.POST("/libraries", s.handleCreateLibrary, auth.RequireRole("admin"))
@@ -71,10 +70,31 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	// Items
 	api.GET("/items", s.handleListItems)
 	api.GET("/items/:id", s.handleGetItem)
+	api.GET("/items/:id/subtitles", s.handleListSubtitles)
+	api.GET("/items/:id/subtitles/:lang", s.handleGetSubtitle)
+
+	// Users (admin only for write)
+	api.POST("/users", s.handleCreateUser, auth.RequireRole("admin"))
+	api.PUT("/users/:id", s.handleUpdateUser, auth.RequireRole("admin"))
+	api.DELETE("/users/:id", s.handleDeleteUser, auth.RequireRole("admin"))
+
+	// Collections / Playlists
+	api.GET("/collections", s.handleListCollections)
+	api.POST("/collections", s.handleCreateCollection)
+	api.GET("/collections/:id", s.handleGetCollection)
+	api.POST("/collections/:id/items", s.handleAddToCollection)
+	api.DELETE("/collections/:id/items/:item_id", s.handleRemoveFromCollection)
+
+	// Dashboard / Activity
+	api.GET("/activity", s.handleListActivity)
+
+	// WebSocket realtime
+	e.GET("/ws", s.handleWebSocket)
 
 	// Stream routes
 	streamSrv := stream.NewServer(s.db, "./media")
 	streamSrv.RegisterRoutes(e)
+	stream.RegisterAdaptiveRoutes(e, s.db, "./media")
 
 	// Session info
 	api.GET("/session", s.handleGetSession)
@@ -119,24 +139,10 @@ func (s *Server) handleLogin(c echo.Context) error {
 	})
 }
 
-// SecurityHeaders middleware adds OWASP recommended headers
-func SecurityHeaders() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
-			c.Response().Header().Set("X-Frame-Options", "DENY")
-			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
-			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'")
-			return next(c)
-		}
-	}
-}
-
+// handleAuthCallback is a placeholder for OAuth callback
 func (s *Server) handleAuthCallback(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "not implemented"})
 }
-
 func (s *Server) handleListUsers(c echo.Context) error {
 	return c.JSON(http.StatusOK, []map[string]string{})
 }
@@ -235,4 +241,177 @@ func (s *Server) handleGetSession(c echo.Context) error {
 		"bandwidth_kbps": user.BandwidthKB,
 		"timestamp":      time.Now().Unix(),
 	})
+}
+
+// --- Subtitles ---
+
+func (s *Server) handleListSubtitles(c echo.Context) error {
+	itemID := c.Param("id")
+	item, err := s.db.GetItemByID(itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+	path, _ := item["path"].(string)
+	subs, err := probe.ExtractSubtitleTracks(path)
+	if err != nil {
+		return c.JSON(http.StatusOK, []map[string]interface{}{})
+	}
+	return c.JSON(http.StatusOK, subs)
+}
+
+func (s *Server) handleGetSubtitle(c echo.Context) error {
+	itemID := c.Param("id")
+	lang := c.Param("lang")
+	item, err := s.db.GetItemByID(itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+	path, _ := item["path"].(string)
+	// Extract subtitle to temp file and serve
+	subPath, err := probe.ExtractSubtitleToFile(path, lang)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "subtitle not found")
+	}
+	return c.File(subPath)
+}
+
+// --- Users CRUD ---
+
+func (s *Server) handleCreateUser(c echo.Context) error {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(400, "invalid request")
+	}
+	if req.Username == "" || req.Password == "" {
+		return echo.NewHTTPError(400, "username and password required")
+	}
+	if req.Role == "" {
+		req.Role = "user"
+	}
+	// Hash password
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return echo.NewHTTPError(500, "password hashing failed")
+	}
+	id := uuid.New().String()
+	if err := s.db.CreateUser(id, req.Username, string(hash), req.Role); err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"id": id, "username": req.Username, "role": req.Role})
+}
+
+func (s *Server) handleUpdateUser(c echo.Context) error {
+	id := c.Param("id")
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(400, "invalid request")
+	}
+	if err := s.db.UpdateUserRole(id, req.Role); err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]string{"id": id, "role": req.Role})
+}
+
+func (s *Server) handleDeleteUser(c echo.Context) error {
+	id := c.Param("id")
+	if err := s.db.DeleteUser(id); err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Collections ---
+
+func (s *Server) handleListCollections(c echo.Context) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return echo.NewHTTPError(401, "unauthorized")
+	}
+	cols, err := s.db.ListCollections(user.UserID)
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusOK, cols)
+}
+
+func (s *Server) handleCreateCollection(c echo.Context) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return echo.NewHTTPError(401, "unauthorized")
+	}
+	var req struct {
+		Name string `json:"name"`
+		Type string `json:"type"` // "collection" or "playlist"
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(400, "invalid request")
+	}
+	if req.Name == "" {
+		return echo.NewHTTPError(400, "name required")
+	}
+	if req.Type == "" {
+		req.Type = "collection"
+	}
+	id := uuid.New().String()
+	if err := s.db.CreateCollection(id, user.UserID, req.Name, req.Type); err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"id": id, "name": req.Name, "type": req.Type})
+}
+
+func (s *Server) handleGetCollection(c echo.Context) error {
+	id := c.Param("id")
+	col, items, err := s.db.GetCollectionWithItems(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "collection not found")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"collection": col,
+		"items":      items,
+	})
+}
+
+func (s *Server) handleAddToCollection(c echo.Context) error {
+	colID := c.Param("id")
+	var req struct {
+		ItemID string `json:"item_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(400, "invalid request")
+	}
+	if err := s.db.AddItemToCollection(colID, req.ItemID); err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (s *Server) handleRemoveFromCollection(c echo.Context) error {
+	colID := c.Param("id")
+	itemID := c.Param("item_id")
+	if err := s.db.RemoveItemFromCollection(colID, itemID); err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Activity / Dashboard ---
+
+func (s *Server) handleListActivity(c echo.Context) error {
+	acts, err := s.db.ListActivity(50)
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusOK, acts)
+}
+
+// --- WebSocket ---
+
+func (s *Server) handleWebSocket(c echo.Context) error {
+	return ws.HandleWebSocket(c, s.db)
 }

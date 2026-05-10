@@ -180,7 +180,45 @@ func parseAudioStream(s *Stream) *AudioInfo {
 	return a
 }
 
-// QuickProbe runs ffprobe with minimal output for fast checks
-func QuickProbe(path string) (*MediaInfo, error) {
-	return Probe(path)
+// ExtractSubtitleTracks returns subtitle streams from a media file
+func ExtractSubtitleTracks(path string) ([]map[string]interface{}, error) {
+	info, err := Probe(path)
+	if err != nil {
+		return nil, err
+	}
+	var tracks []map[string]interface{}
+	for i, sub := range info.Subtitles {
+		tracks = append(tracks, map[string]interface{}{
+			"index":    i,
+			"codec":    sub.Codec,
+			"language": sub.Language,
+		})
+	}
+	return tracks, nil
+}
+
+// ExtractSubtitleToFile extracts a subtitle stream to SRT file
+func ExtractSubtitleToFile(path, lang string) (string, error) {
+	// Find subtitle index for language
+	info, err := Probe(path)
+	if err != nil {
+		return "", err
+	}
+	var subIndex int = -1
+	for i, sub := range info.Subtitles {
+		if sub.Language == lang {
+			subIndex = i
+			break
+		}
+	}
+	if subIndex == -1 {
+		return "", fmt.Errorf("subtitle language %s not found", lang)
+	}
+
+	outPath := "/tmp/aetherstream_sub_" + lang + ".srt"
+	cmd := exec.Command("ffmpeg", "-i", path, "-map", fmt.Sprintf("0:s:%d", subIndex), outPath, "-y")
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("subtitle extraction failed: %w", err)
+	}
+	return outPath, nil
 }
