@@ -115,7 +115,7 @@ func ScanSegments(dir string) ([]Segment, error) {
 
 // WritePlaylist writes playlist content to file
 func WritePlaylist(path, content string) error {
-	return os.WriteFile(path, []byte(content), 0644)
+	return os.WriteFile(path, []byte(content), 0600)
 }
 
 // GenerateMasterForProfiles creates master playlist for predefined profiles

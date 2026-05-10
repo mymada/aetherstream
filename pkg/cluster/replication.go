@@ -118,7 +118,7 @@ func (r *DBReplication) ApplyWAL(data []byte) error {
 		return fmt.Errorf("mkdir wal dir: %w", err)
 	}
 	// Append received WAL data
-	f, err := os.OpenFile(r.walPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
+	f, err := os.OpenFile(r.walPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return fmt.Errorf("open wal: %w", err)
 	}

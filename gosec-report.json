@@ -2,102 +2,6 @@
 	"Golang errors": {},
 	"Issues": [
 		{
-			"severity": "MEDIUM",
-			"confidence": "MEDIUM",
-			"cwe": {
-				"id": "409",
-				"url": "https://cwe.mitre.org/data/definitions/409.html"
-			},
-			"rule_id": "G110",
-			"details": "Potential DoS vulnerability via decompression bomb",
-			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
-			"code": "146: \t}\n147: \t_, err = io.Copy(df, rc)\n148: \tdf.Close()\n",
-			"line": "147",
-			"column": "11",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G302",
-			"details": "Expect file permissions to be 0600 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/cluster/replication.go",
-			"code": "120: \t// Append received WAL data\n121: \tf, err := os.OpenFile(r.walPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)\n122: \tif err != nil {\n",
-			"line": "121",
-			"column": "12",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G306",
-			"details": "Expect WriteFile permissions to be 0600 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
-			"code": "123: \theader := []byte(xml.Header + string(out) + \"\\n\")\n124: \treturn os.WriteFile(path, header, 0640)\n125: }\n",
-			"line": "124",
-			"column": "9",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G306",
-			"details": "Expect WriteFile permissions to be 0600 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
-			"code": "90: \theader := []byte(xml.Header + string(out) + \"\\n\")\n91: \treturn os.WriteFile(path, header, 0640)\n92: }\n",
-			"line": "91",
-			"column": "9",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G306",
-			"details": "Expect WriteFile permissions to be 0600 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
-			"code": "343: \tpath := filepath.Join(b.dir, fmt.Sprintf(\"segment_%d.ts\", time.Now().Unix()))\n344: \tif err := os.WriteFile(path, data, 0644); err != nil {\n345: \t\treturn \"\", err\n",
-			"line": "344",
-			"column": "12",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
-			"severity": "MEDIUM",
-			"confidence": "HIGH",
-			"cwe": {
-				"id": "276",
-				"url": "https://cwe.mitre.org/data/definitions/276.html"
-			},
-			"rule_id": "G306",
-			"details": "Expect WriteFile permissions to be 0600 or less",
-			"file": "/home/devuser/dev/aetherstream/pkg/hls/hls.go",
-			"code": "117: func WritePlaylist(path, content string) error {\n118: \treturn os.WriteFile(path, []byte(content), 0644)\n119: }\n",
-			"line": "118",
-			"column": "9",
-			"nosec": false,
-			"suppressions": null
-		},
-		{
 			"severity": "LOW",
 			"confidence": "HIGH",
 			"cwe": {
@@ -667,8 +571,8 @@
 			"rule_id": "G104",
 			"details": "Errors unhandled",
 			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
-			"code": "149: \tif err != nil {\n150: \t\tos.Remove(tmpPath)\n151: \t\treturn err\n",
-			"line": "150",
+			"code": "150: \tif err != nil \u0026\u0026 err != io.EOF {\n151: \t\tos.Remove(tmpPath)\n152: \t\treturn err\n",
+			"line": "151",
 			"column": "3",
 			"nosec": false,
 			"suppressions": null
@@ -683,8 +587,8 @@
 			"rule_id": "G104",
 			"details": "Errors unhandled",
 			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
-			"code": "147: \t_, err = io.Copy(df, rc)\n148: \tdf.Close()\n149: \tif err != nil {\n",
-			"line": "148",
+			"code": "148: \t_, err = io.CopyN(df, rc, maxDecompressedSize)\n149: \tdf.Close()\n150: \tif err != nil \u0026\u0026 err != io.EOF {\n",
+			"line": "149",
 			"column": "2",
 			"nosec": false,
 			"suppressions": null
@@ -740,9 +644,9 @@
 	],
 	"Stats": {
 		"files": 56,
-		"lines": 11231,
+		"lines": 11232,
 		"nosec": 21,
-		"found": 46
+		"found": 40
 	},
 	"GosecVersion": "dev"
 }

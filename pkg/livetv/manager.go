@@ -341,7 +341,7 @@ func (b *TimeshiftBuffer) WriteSegment(data []byte, duration time.Duration) (str
 	defer b.mu.Unlock()
 
 	path := filepath.Join(b.dir, fmt.Sprintf("segment_%d.ts", time.Now().Unix()))
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return "", err
 	}
 

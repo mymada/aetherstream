@@ -144,9 +144,10 @@ func extractFile(zf *zip.File, destPath string) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(df, rc)
+	const maxDecompressedSize = 100 * 1024 * 1024 // 100MB limit
+	_, err = io.CopyN(df, rc, maxDecompressedSize)
 	df.Close()
-	if err != nil {
+	if err != nil && err != io.EOF {
 		os.Remove(tmpPath)
 		return err
 	}

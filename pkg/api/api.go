@@ -350,7 +350,7 @@ func (s *Server) handleGetSubtitle(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "subtitle not found")
 	}
 	
-	// Validate the returned path is within expected directory
+		// Validate the returned path is within expected directory
 	if !strings.HasPrefix(subPath, os.TempDir()) && !strings.HasPrefix(subPath, "./thumbnails") {
 		return echo.NewHTTPError(http.StatusInternalServerError, "invalid subtitle path")
 	}
