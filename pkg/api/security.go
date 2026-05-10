@@ -81,7 +81,7 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			c.Response().Header().Set("X-Frame-Options", "DENY")
 			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
 			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self' ws: wss:")
+			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https: ws: wss:")
 			// Only send HSTS over HTTPS to avoid leaking the header on HTTP connections
 			if c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https" {
 				c.Response().Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
@@ -480,10 +480,10 @@ func isPrivateIP(ip string) bool {
 // CORSMiddleware returns Echo CORS middleware configured for AetherStream Web UI
 func CORSMiddleware() echo.MiddlewareFunc {
 	return middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "https://localhost:5173", "https://localhost:8080"},
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch},
-		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestedWith},
-		ExposeHeaders:    []string{echo.HeaderContentLength, echo.HeaderContentType},
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestedWith, csrfTokenHeader},
+		ExposeHeaders:    []string{echo.HeaderContentLength, echo.HeaderContentType, csrfTokenHeader},
 		AllowCredentials: true,
 		MaxAge:           86400,
 	})
