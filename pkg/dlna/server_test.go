@@ -134,6 +134,67 @@ func TestContentDirectoryBrowseLibrary(t *testing.T) {
 	assert.Contains(t, body, "01:00:00")
 }
 
+func TestContentDirectoryBrowseXSS(t *testing.T) {
+	database := setupTestDB(t)
+	defer database.Close()
+
+	// Insert library/item with malicious names
+	require.NoError(t, database.CreateLibrary("lib-xss", "<script>alert(1)</script>", "/data/movies", "video"))
+	require.NoError(t, database.CreateItem("item-xss", "lib-xss", "/data/movies/test.mp4", "<img src=x onerror=alert(1)>.mp4", "video", "mp4", 100, 10, 0, 0, "h264", "aac"))
+
+	srv := NewServer(database, "127.0.0.1", 1901, "TestAether")
+
+	// Browse root (containers)
+	envelope := fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+      <ObjectID>0</ObjectID>
+      <BrowseFlag>BrowseDirectChildren</BrowseFlag>
+      <Filter>*</Filter>
+      <StartingIndex>0</StartingIndex>
+      <RequestedCount>0</RequestedCount>
+      <SortCriteria></SortCriteria>
+    </u:Browse>
+  </s:Body>
+</s:Envelope>`)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/ContentDirectory/control", strings.NewReader(envelope))
+	srv.handleContentDirectory(w, r)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.NotContains(t, body, "<script>alert(1)</script>")
+	// xml.Marshal escapes struct fields; then xmlEscape in handleBrowse double-escapes the Result wrapper
+	// The key safety check: no raw <script> tag appears in the final response
+	assert.Contains(t, body, "&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;")
+
+	// Browse library (items)
+	envelope2 := fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+      <ObjectID>lib-xss</ObjectID>
+      <BrowseFlag>BrowseDirectChildren</BrowseFlag>
+      <Filter>*</Filter>
+      <StartingIndex>0</StartingIndex>
+      <RequestedCount>0</RequestedCount>
+      <SortCriteria></SortCriteria>
+    </u:Browse>
+  </s:Body>
+</s:Envelope>`)
+
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/ContentDirectory/control", strings.NewReader(envelope2))
+	srv.handleContentDirectory(w2, r2)
+
+	assert.Equal(t, http.StatusOK, w2.Code)
+	body2 := w2.Body.String()
+	assert.NotContains(t, body2, "<img src=x onerror=alert(1)>")
+	assert.Contains(t, body2, "&amp;lt;img src=x onerror=alert(1)&amp;gt;.mp4")
+}
+
 func TestContentDirectorySearch(t *testing.T) {
 	database := setupTestDB(t)
 	defer database.Close()
