@@ -205,11 +205,13 @@ All PRs require at least one review before merging. Reviewers check for:
 
 ## Release Process
 
-1. Update version in `pkg/api/api.go` (`handleSystemInfo`)
-2. Update `CHANGELOG.md` (if present)
-3. Tag: `git tag -a v0.x.y -m "Release v0.x.y"`
-4. Push tag: `git push origin v0.x.y`
-5. CI builds artifacts and Docker image
+1. Update version in `pkg/api/items.go` (`handleSystemInfo`)
+2. Update version strings in `docs/API.md`
+3. Update `CHANGELOG.md` (if present)
+4. Update `README.md` version badge and feature list if needed
+5. Tag: `git tag -a v1.x.y -m "Release v1.x.y"`
+6. Push tag: `git push origin v1.x.y`
+7. CI builds artifacts and Docker image
 
 ---
 

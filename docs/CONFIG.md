@@ -35,6 +35,14 @@ swiftflow:
   base_url: ""
   api_key: ""
   webhook_secret: ""
+
+logging:
+  level: info
+  pretty: false
+
+metrics:
+  port: 9090
+  enabled: true
 ```
 
 ### Server
@@ -88,6 +96,13 @@ SQLite is opened with WAL mode (`_journal_mode=WAL`) and a 5-second busy timeout
 | `swiftflow.api_key` | string | — | SwiftFlow API key |
 | `swiftflow.webhook_secret` | string | — | Webhook signature validation secret |
 
+### Logging
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `logging.level` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `logging.pretty` | bool | `false` | Pretty-print logs (human-readable) |
+
 ---
 
 ## Environment Variables
@@ -109,6 +124,10 @@ All environment variables are prefixed with `AETHERSTREAM_`.
 | `AETHERSTREAM_SWIFTFLOW_KEY` | `swiftflow.api_key` | No | — |
 | `AETHERSTREAM_SWIFTFLOW_WEBHOOK_SECRET` | `swiftflow.webhook_secret` | No | — |
 | `AETHERSTREAM_MASTER_KEY` | secure store key | No | — |
+| `AETHERSTREAM_LOG_LEVEL` | `logging.level` | No | `info` |
+| `AETHERSTREAM_LOG_PRETTY` | `logging.pretty` | No | `false` |
+| `AETHERSTREAM_METRICS_PORT` | `metrics.port` | No | `9090` |
+| `AETHERSTREAM_METRICS_ENABLED` | `metrics.enabled` | No | `true` |
 
 ---
 
@@ -120,6 +139,13 @@ To run with a custom config file, set the working directory or symlink `config.y
 
 ```bash
 ./aetherstream   # loads ./config.yaml
+```
+
+To use a custom config file path, symlink it into the working directory:
+
+```bash
+ln -s /etc/aetherstream/config.yaml ./config.yaml
+./aetherstream
 ```
 
 ---

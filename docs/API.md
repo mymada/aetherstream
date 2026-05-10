@@ -1,6 +1,6 @@
 # AetherStream API Reference
 
-This document describes all public HTTP endpoints, request/response formats, and authentication requirements for AetherStream v0.1.0.
+This document describes all public HTTP endpoints, request/response formats, and authentication requirements for AetherStream v1.3.0.
 
 ---
 
@@ -78,7 +78,7 @@ Returns server version and health status.
 ```json
 {
   "name": "AetherStream",
-  "version": "0.1.0",
+  "version": "1.3.0",
   "status": "ok"
 }
 ```
@@ -760,4 +760,8 @@ All routes are protected by the following middleware stack (in order):
 
 ## Changelog
 
+- v1.3.0 — Gap closure: subtitles, chapters, progress tracking, WebRTC, clustering, GPU transcoding, Chromecast/AirPlay, DLNA, plugin system, Live TV/DVR, secure store, audit logging, E2E tests
+- v1.2.0 — Production hardening: TLS/CORS/rate-limit, Prometheus/pprof, cache LRU, thumbnails, FTS5 search, benchmarks, CI/CD, web UI
+- v1.1.0 — Streaming engine: probe, encoder, HLS, DASH, adaptive streaming, bandwidth adapter
+- v1.0.0 — Library engine: scanner, naming parser, metadata fetch (TMDb, MusicBrainz), library manager
 - v0.1.0 — Initial API set

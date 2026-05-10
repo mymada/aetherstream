@@ -1,7 +1,9 @@
 # AetherStream
 
-A modern media server rewritten from Jellyfin in Go, optimized for adaptive transcoding and WiFi captive portal integration via SwiftFlow.
+A modern media server rewritten from Jellyfin in Go, optimized for adaptive transcoding, WiFi captive portal integration via SwiftFlow, and low-latency WebRTC streaming.
 
+**Version:** v1.3.0  
+**Packages:** 57 | **Production LoC:** ~15,482  
 **Repository:** https://github.com/mymada/aetherstream
 
 ---
@@ -14,15 +16,19 @@ A modern media server rewritten from Jellyfin in Go, optimized for adaptive tran
 - **SwiftFlow Integration** — QoS-aware streaming and captive portal authentication for WiFi deployments
 - **Web UI** — React-based responsive interface served from `/app/web`
 - **WebSocket Realtime** — Live activity feed and session sync
-- **DLNA / UPnP** — Network discovery and direct play for compatible devices
-- **Live TV / DVR** — Stream and record live television
-- **Plugin System** — Extensible architecture for custom integrations
-- **Collections & Playlists** — User-managed media groupings
-- **Subtitles** — Automatic extraction and on-the-fly serving
+- **DLNA / UPnP** — Network discovery and direct play for Smart TVs, consoles, and media players
+- **Live TV / DVR** — Stream and record live television via M3U/XMLTV
+- **Plugin System** — Extensible external-process plugin architecture (JSON-RPC)
+- **Collections & Playlists** — User-managed media groupings with smart playlists
+- **Subtitles** — Automatic extraction, on-the-fly serving, and chapter support
 - **Full-text Search** — SQLite FTS5 powered search across library items
 - **Secure Authentication** — JWT tokens, bcrypt password hashing, role-based access control
+- **Secure Store** — AES-256-GCM encrypted secret storage
 - **Prometheus Metrics** — Built-in `/metrics` and pprof endpoints
+- **WebRTC** — Low-latency streaming for live and real-time use cases
+- **Chromecast / AirPlay** — Cast playback to external devices
 - **Docker Ready** — Multi-stage build with health checks
+- **Clustering** — Lightweight gossip-based node discovery for multi-server deployments
 
 ---
 
@@ -55,6 +61,8 @@ The server will be available at `http://localhost:8080`.
 | `AETHERSTREAM_FFMPEG_HWACCEL` | Hardware acceleration mode | `auto` |
 | `AETHERSTREAM_SWIFTFLOW_URL` | SwiftFlow API base URL | — |
 | `AETHERSTREAM_SWIFTFLOW_KEY` | SwiftFlow API key | — |
+| `AETHERSTREAM_LOG_LEVEL` | Log level (debug, info, warn, error) | `info` |
+| `AETHERSTREAM_LOG_PRETTY` | Pretty-print logs (human-readable) | `false` |
 
 ### Binary
 
@@ -109,6 +117,14 @@ swiftflow:
   base_url: ""
   api_key: ""
   webhook_secret: ""
+
+logging:
+  level: info
+  pretty: false
+
+metrics:
+  port: 9090
+  enabled: true
 ```
 
 ---
@@ -227,23 +243,36 @@ go vet ./...
 
 | Package | Responsibility |
 |---------|---------------|
-| `pkg/api` | REST API controllers |
+| `pkg/api` | REST API controllers + middleware |
 | `pkg/auth` | JWT token management |
-| `pkg/config` | YAML configuration |
-| `pkg/db` | SQLite database + migrations |
-| `pkg/models` | Domain structs |
-| `pkg/scanner` | File system library scanner |
-| `pkg/naming` | Movie/TV/music naming parser |
-| `pkg/library` | Library CRUD |
-| `pkg/metadata` | TMDb, MusicBrainz clients |
-| `pkg/probe` | FFmpeg ffprobe parser |
-| `pkg/encoder` | FFmpeg command builder |
-| `pkg/transcode` | Transcode job manager |
-| `pkg/hls` | HLS playlist generator |
-| `pkg/stream` | HTTP streaming handlers |
-| `pkg/profiles` | Per-device encode profiles |
-| `pkg/swiftflow` | SwiftFlow API client |
 | `pkg/bwadapter` | Bandwidth adaptation |
+| `pkg/cache` | LRU cache |
+| `pkg/cast` | AirPlay + Chromecast |
+| `pkg/cluster` | Distributed clustering |
+| `pkg/config` | YAML + env configuration |
+| `pkg/dash` | DASH streaming |
+| `pkg/db` | SQLite database + migrations |
+| `pkg/dlna` | UPnP/DLNA server |
+| `pkg/encoder` | FFmpeg command builder + profiles |
+| `pkg/hls` | HLS playlist generator |
+| `pkg/library` | Library CRUD + metadata fetch |
+| `pkg/livetv` | Live TV / DVR manager |
+| `pkg/metadata` | TMDb, MusicBrainz clients |
+| `pkg/metrics` | Prometheus metrics + pprof |
+| `pkg/models` | Domain structs |
+| `pkg/naming` | Movie/TV/music naming parser |
+| `pkg/probe` | FFmpeg ffprobe parser |
+| `pkg/profiles` | Per-device encode profiles |
+| `pkg/scanner` | File system library scanner |
+| `pkg/search` | SQLite FTS5 search |
+| `pkg/securestore` | AES-256-GCM encrypted store |
+| `pkg/stream` | HTTP streaming handlers |
+| `pkg/swiftflow` | SwiftFlow API client |
+| `pkg/tasks` | Background task runner |
+| `pkg/thumbnail` | Thumbnail generation |
+| `pkg/transcode` | Transcode job manager |
+| `pkg/webrtc` | WebRTC signaling |
+| `pkg/ws` | WebSocket hub |
 
 ---
 

@@ -11,6 +11,8 @@ This guide covers deploying AetherStream with Docker, systemd, and Kubernetes.
 | Go         | 1.25            | CGO required for SQLite |
 | FFmpeg     | 5.x             | With ffprobe |
 | SQLite     | 3.35+           | FTS5 support recommended |
+| Docker     | 20.10+          | For containerized deployment |
+| systemd    | 240+            | For systemd service deployment |
 
 Optional:
 - **NVIDIA GPU** + drivers for NVENC
@@ -45,6 +47,8 @@ The server will be available at `http://localhost:8080`.
 | `AETHERSTREAM_FFMPEG_HWACCEL` | No | `auto` | Hardware acceleration mode |
 | `AETHERSTREAM_SWIFTFLOW_URL` | No | — | SwiftFlow API base URL |
 | `AETHERSTREAM_SWIFTFLOW_KEY` | No | — | SwiftFlow API key |
+| `AETHERSTREAM_LOG_LEVEL` | No | `info` | Log level (debug, info, warn, error) |
+| `AETHERSTREAM_LOG_PRETTY` | No | `false` | Pretty-print logs |
 
 ### Docker Compose (Production)
 

@@ -286,7 +286,11 @@ AetherStream uses zerolog with Unix timestamps. To enable pretty-printed logs du
 
 ```bash
 export AETHERSTREAM_LOG_PRETTY=true
-# Not yet implemented; pipe through jq:
+./aetherstream
+```
+
+For JSON log parsing:
+```bash
 ./aetherstream | jq -R 'fromjson?'
 ```
 
@@ -295,6 +299,11 @@ Log levels (default: info):
 - `info` — startup, requests, scans
 - `warn` — recoverable issues (DLNA fail, missing GPU)
 - `error` — crashes, DB errors
+
+Set log level via environment variable:
+```bash
+export AETHERSTREAM_LOG_LEVEL=debug
+```
 
 ---
 
