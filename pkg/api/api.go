@@ -12,6 +12,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/library"
 	"github.com/devuser/aetherstream/pkg/stream"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Server wraps Echo and dependencies
@@ -93,12 +94,19 @@ func (s *Server) handleLogin(c echo.Context) error {
 		return echo.NewHTTPError(400, "invalid request")
 	}
 
-	// For Phase 1: simple demo login — admin/admin
-	if req.Username != "admin" || req.Password != "admin" {
+	// Lookup user from DB
+	_, passwordHash, _, err := s.db.GetUserByUsername(req.Username)
+	if err != nil {
 		return echo.NewHTTPError(401, "invalid credentials")
 	}
 
-	token, err := s.auth.GenerateToken("admin-1", "admin", "admin")
+	// Verify password with bcrypt
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+		return echo.NewHTTPError(401, "invalid credentials")
+	}
+
+	// Generate JWT token with actual user info
+	token, err := s.auth.GenerateToken("admin-1", req.Username, "admin")
 	if err != nil {
 		return echo.NewHTTPError(500, "token generation failed")
 	}
@@ -106,6 +114,20 @@ func (s *Server) handleLogin(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{
 		"token": token,
 	})
+}
+
+// SecurityHeaders middleware adds OWASP recommended headers
+func SecurityHeaders() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+			c.Response().Header().Set("X-Frame-Options", "DENY")
+			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
+			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'")
+			return next(c)
+		}
+	}
 }
 
 func (s *Server) handleAuthCallback(c echo.Context) error {

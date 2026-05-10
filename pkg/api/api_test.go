@@ -12,6 +12,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/config"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/library"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestHandleSystemInfo(t *testing.T) {
@@ -47,7 +48,11 @@ func TestHandleLogin(t *testing.T) {
 
 	srv := NewServer(dbConn, authSvc, cfg, libMgr)
 
-	// Valid login
+	// Valid login — create user in DB with bcrypt hash
+	dbConn.Migrate()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+	dbConn.CreateUser("admin-1", "admin", string(hash), "admin")
+
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(`{"username":"admin","password":"admin"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

@@ -51,10 +51,20 @@ func main() {
 
 	// Echo server
 	e := echo.New()
-	e.HideBanner = true
-	e.Use(middleware.Recover())
-	e.Use(middleware.RequestID())
+	// Apply global middleware
 	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+	e.Use(api.SecurityHeaders())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:8080"},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
+		AllowCredentials: true,
+		MaxAge:           86400,
+	}))
+	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
+	e.HideBanner = true
+	e.Use(middleware.RequestID())
 
 	// Library manager
 	libMgr, err := library.NewManager(database, cfg.SwiftFlow.APIKey) // reusing API key slot for TMDb

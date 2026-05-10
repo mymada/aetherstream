@@ -54,13 +54,20 @@ func (s *Server) handleDirectStream(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "no file path")
 	}
 
+	// Security: validate path is within mediaRoot
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(s.mediaRoot)
+	if !strings.HasPrefix(cleanPath, cleanRoot+string(filepath.Separator)) && cleanPath != cleanRoot {
+		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
+	}
+
 	// Check file exists
-	if _, err := os.Stat(path); err != nil {
+	if _, err := os.Stat(cleanPath); err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "file not found on disk")
 	}
 
 	// Serve with range support
-	return c.File(path)
+	return c.File(cleanPath)
 }
 
 // handleHLSMaster serves the master playlist
@@ -114,12 +121,14 @@ func (s *Server) handleHLSSegment(c echo.Context) error {
 
 	segmentPath := filepath.Join(s.mediaRoot, "transcodes", itemID, profile, segment)
 
-	// Security: ensure path is within transcodes dir
-	if !strings.HasPrefix(segmentPath, filepath.Join(s.mediaRoot, "transcodes")) {
+	// Security: ensure path is within transcodes dir (defense in depth)
+	cleanSegment := filepath.Clean(segmentPath)
+	cleanRoot := filepath.Clean(filepath.Join(s.mediaRoot, "transcodes"))
+	if !strings.HasPrefix(cleanSegment, cleanRoot+string(filepath.Separator)) {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
 	}
 
-	return c.File(segmentPath)
+	return c.File(cleanSegment)
 }
 
 // handleProbe returns ffprobe info for an item
