@@ -116,9 +116,9 @@ func main() {
 	// Swagger docs
 	docs.RegisterRoutes(e)
 
-	// Serve Web UI static files
-	e.Static("/", "web/dist")
-	e.File("/", "web/dist/index.html")
+	// Serve Web UI static files on /app — MUST be after API routes
+	e.Static("/app", "web/dist")
+	e.File("/app", "web/dist/index.html")
 
 	// DLNA/UPnP server
 	dlnaServer := dlna.NewServer(database, cfg.Server.Host, cfg.Server.Port+1, "AetherStream")
