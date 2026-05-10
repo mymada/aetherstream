@@ -2,9 +2,9 @@
 	"Golang errors": {},
 	"Issues": [],
 	"Stats": {
-		"files": 61,
-		"lines": 12805,
-		"nosec": 24,
+		"files": 70,
+		"lines": 14653,
+		"nosec": 27,
 		"found": 0
 	},
 	"GosecVersion": "dev"
