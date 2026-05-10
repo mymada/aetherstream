@@ -19,6 +19,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/auth"
 	"github.com/devuser/aetherstream/pkg/library"
+	"github.com/devuser/aetherstream/pkg/securestore"
 )
 
 func main() {
@@ -49,9 +50,18 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to init auth")
 	}
 
+	// Secure store for secrets
+	secureStore, err := securestore.NewStoreFromEnv("AETHERSTREAM_MASTER_KEY")
+	if err != nil {
+		log.Warn().Err(err).Msg("secure store not initialized, using plaintext secrets")
+		// Fallback: create with a derived key from auth secret (NOT for production)
+		secureStore, _ = securestore.NewStore(cfg.Auth.Secret)
+	}
+
 	// Echo server
 	e := echo.New()
-	// Apply global middleware
+	e.HideBanner = true
+	e.Use(middleware.RequestID())
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(api.SecurityHeaders())
@@ -63,8 +73,6 @@ func main() {
 		MaxAge:           86400,
 	}))
 	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
-	e.HideBanner = true
-	e.Use(middleware.RequestID())
 
 	// Library manager
 	libMgr, err := library.NewManager(database, cfg.SwiftFlow.APIKey) // reusing API key slot for TMDb
@@ -74,7 +82,7 @@ func main() {
 	defer libMgr.Close()
 
 	// API routes
-	apiServer := api.NewServer(database, authSvc, cfg, libMgr)
+	apiServer := api.NewServer(database, authSvc, cfg, libMgr, secureStore)
 	apiServer.RegisterRoutes(e)
 
 	// Start

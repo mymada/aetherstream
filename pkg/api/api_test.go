@@ -12,6 +12,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/config"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/library"
+	"github.com/devuser/aetherstream/pkg/securestore"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -29,7 +30,10 @@ func TestHandleSystemInfo(t *testing.T) {
 	libMgr, _ := library.NewManager(dbConn, "")
 	defer libMgr.Close()
 
-	srv := NewServer(dbConn, authSvc, cfg, libMgr)
+	// Create secure store for test
+	store, _ := securestore.NewStore("this-is-a-32-byte-key-for-testing!!")
+
+	srv := NewServer(dbConn, authSvc, cfg, libMgr, store)
 	err := srv.handleSystemInfo(c)
 
 	assert.NoError(t, err)
@@ -46,7 +50,10 @@ func TestHandleLogin(t *testing.T) {
 	libMgr, _ := library.NewManager(dbConn, "")
 	defer libMgr.Close()
 
-	srv := NewServer(dbConn, authSvc, cfg, libMgr)
+	// Create secure store for test
+	store, _ := securestore.NewStore("this-is-a-32-byte-key-for-testing!!")
+
+	srv := NewServer(dbConn, authSvc, cfg, libMgr, store)
 
 	// Valid login — create user in DB with bcrypt hash
 	dbConn.Migrate()
@@ -84,7 +91,10 @@ func TestProtectedRoute(t *testing.T) {
 	libMgr, _ := library.NewManager(dbConn, "")
 	defer libMgr.Close()
 
-	srv := NewServer(dbConn, authSvc, cfg, libMgr)
+	// Create secure store for test
+	store, _ := securestore.NewStore("this-is-a-32-byte-key-for-testing!!")
+
+	srv := NewServer(dbConn, authSvc, cfg, libMgr, store)
 	srv.RegisterRoutes(e)
 
 	// Without token

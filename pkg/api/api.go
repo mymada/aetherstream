@@ -11,28 +11,31 @@ import (
 	"github.com/devuser/aetherstream/pkg/config"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/library"
+	"github.com/devuser/aetherstream/pkg/securestore"
 	"github.com/devuser/aetherstream/pkg/stream"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // Server wraps Echo and dependencies
 type Server struct {
-	e       *echo.Echo
-	db      *db.DB
-	auth    *auth.Service
-	cfg     *config.Config
-	logger  zerolog.Logger
-	library *library.Manager
+	e           *echo.Echo
+	db          *db.DB
+	auth        *auth.Service
+	cfg         *config.Config
+	logger      zerolog.Logger
+	library     *library.Manager
+	secureStore *securestore.Store
 }
 
 // NewServer creates API server
-func NewServer(database *db.DB, authSvc *auth.Service, cfg *config.Config, libMgr *library.Manager) *Server {
+func NewServer(database *db.DB, authSvc *auth.Service, cfg *config.Config, libMgr *library.Manager, store *securestore.Store) *Server {
 	return &Server{
-		db:      database,
-		auth:    authSvc,
-		cfg:     cfg,
-		logger:  zerolog.New(nil),
-		library: libMgr,
+		db:          database,
+		auth:        authSvc,
+		cfg:         cfg,
+		logger:      zerolog.New(nil),
+		library:     libMgr,
+		secureStore: store,
 	}
 }
 
