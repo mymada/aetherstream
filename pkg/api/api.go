@@ -11,6 +11,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/config"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/library"
+	"github.com/devuser/aetherstream/pkg/stream"
 )
 
 // Server wraps Echo and dependencies
@@ -66,6 +67,10 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	// Items
 	api.GET("/items", s.handleListItems)
 	api.GET("/items/:id", s.handleGetItem)
+
+	// Stream routes
+	streamSrv := stream.NewServer(s.db, "./media")
+	streamSrv.RegisterRoutes(e)
 
 	// Session info
 	api.GET("/session", s.handleGetSession)
