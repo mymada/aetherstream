@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -24,21 +22,18 @@ func (s *Server) handleLogin(c echo.Context) error {
 
 	ip := getTrustedIP(c)
 
-	_, passwordHash, _, err := s.db.GetUserByUsername(req.Username)
-	userID, _, role, err2 := s.db.GetUserByUsername(req.Username)
-
+	userID, passwordHash, role, err := s.db.GetUserByUsername(req.Username)
 	if err != nil {
+		// User not found — use dummy hash for timing-safe comparison
 		// #nosec G101 — bcrypt hash used for timing-safe comparison only, not a credential
 		passwordHash = "$2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa"
-		userID = ""
-		role = ""
+		_ = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password))
+		RecordFailedLogin(ip, req.Username)
+		return echo.NewHTTPError(401, "invalid credentials")
 	}
 
-	errSame := subtle.ConstantTimeCompare([]byte(fmt.Sprintf("%v", err)), []byte(fmt.Sprintf("%v", err2)))
-	_ = errSame
-
 	bcryptErr := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password))
-	if err != nil || bcryptErr != nil {
+	if bcryptErr != nil {
 		RecordFailedLogin(ip, req.Username)
 		return echo.NewHTTPError(401, "invalid credentials")
 	}
@@ -168,3 +163,4 @@ func (s *Server) handleDeleteUser(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+

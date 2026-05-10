@@ -112,9 +112,13 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.GET("/ws", s.handleWebSocket, s.auth.Middleware())
 
 	// Stream routes (protected)
-	streamSrv := stream.NewServer(s.db, "./media")
+	mediaRoot := s.cfg.Server.StaticPath
+	if mediaRoot == "" {
+		mediaRoot = "./media"
+	}
+	streamSrv := stream.NewServer(s.db, mediaRoot)
 	streamSrv.RegisterRoutes(e, s.auth.Middleware())
-	stream.RegisterAdaptiveRoutes(e, s.db, "./media", s.auth.Middleware())
+	stream.RegisterAdaptiveRoutes(e, s.db, mediaRoot, s.auth.Middleware())
 
 	// Session info
 	api.GET("/session", s.handleGetSession)

@@ -67,6 +67,19 @@ func (s *Server) handleDirectStream(c echo.Context) error {
 	// Security: validate path is within mediaRoot
 	cleanPath := filepath.Clean(path)
 	cleanRoot := filepath.Clean(s.mediaRoot)
+	// If mediaRoot is relative, resolve it to absolute
+	if !filepath.IsAbs(cleanRoot) {
+		absRoot, err := filepath.Abs(cleanRoot)
+		if err == nil {
+			cleanRoot = absRoot
+		}
+	}
+	if !filepath.IsAbs(cleanPath) {
+		absPath, err := filepath.Abs(cleanPath)
+		if err == nil {
+			cleanPath = absPath
+		}
+	}
 	if !strings.HasPrefix(cleanPath, cleanRoot+string(filepath.Separator)) && cleanPath != cleanRoot {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
 	}
