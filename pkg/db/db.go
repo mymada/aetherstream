@@ -264,6 +264,25 @@ CREATE INDEX IF NOT EXISTS idx_watch_history_watched_at ON watch_history(watched
 		return fmt.Errorf("migrate watch_history: %w", err)
 	}
 
+	// Chapters
+	chaptersSchema := `
+CREATE TABLE IF NOT EXISTS chapters (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	chapter_index INTEGER NOT NULL,
+	title TEXT,
+	start_seconds REAL NOT NULL,
+	end_seconds REAL NOT NULL,
+	duration_seconds REAL NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(item_id, chapter_index)
+);
+CREATE INDEX IF NOT EXISTS idx_chapters_item ON chapters(item_id);
+`
+	if _, err := d.Exec(chaptersSchema); err != nil {
+		return fmt.Errorf("migrate chapters: %w", err)
+	}
+
 	return nil
 }
 
@@ -751,6 +770,90 @@ func (d *DB) ListWatchHistoryByUser(userID string, limit int) ([]WatchHistory, e
 		history = append(history, h)
 	}
 	return history, nil
+}
+
+// --- Chapters ---
+
+// Chapter represents a stored chapter marker.
+type Chapter struct {
+	ID             int     `json:"id"`
+	ItemID         string  `json:"itemId"`
+	ChapterIndex   int     `json:"chapterIndex"`
+	Title          string  `json:"title"`
+	StartSeconds   float64 `json:"startSeconds"`
+	EndSeconds     float64 `json:"endSeconds"`
+	DurationSeconds float64 `json:"durationSeconds"`
+}
+
+// SaveChapters upserts chapters for an item, replacing any existing chapters.
+func (d *DB) SaveChapters(itemID string, chapters []Chapter) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM chapters WHERE item_id = ?", itemID); err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO chapters(item_id, chapter_index, title, start_seconds, end_seconds, duration_seconds)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for i, ch := range chapters {
+		if _, err := stmt.Exec(itemID, i, ch.Title, ch.StartSeconds, ch.EndSeconds, ch.DurationSeconds); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetChapters returns chapters for an item ordered by index.
+func (d *DB) GetChapters(itemID string) ([]Chapter, error) {
+	rows, err := d.Query(`
+		SELECT id, item_id, chapter_index, title, start_seconds, end_seconds, duration_seconds
+		FROM chapters
+		WHERE item_id = ?
+		ORDER BY chapter_index ASC`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chapters []Chapter
+	for rows.Next() {
+		var ch Chapter
+		if err := rows.Scan(&ch.ID, &ch.ItemID, &ch.ChapterIndex, &ch.Title, &ch.StartSeconds, &ch.EndSeconds, &ch.DurationSeconds); err != nil {
+			continue
+		}
+		chapters = append(chapters, ch)
+	}
+	return chapters, nil
+}
+
+// GetChapterAtPosition returns the chapter that contains the given time (seconds).
+func (d *DB) GetChapterAtPosition(itemID string, position float64) (*Chapter, error) {
+	row := d.QueryRow(`
+		SELECT id, item_id, chapter_index, title, start_seconds, end_seconds, duration_seconds
+		FROM chapters
+		WHERE item_id = ? AND start_seconds <= ? AND end_seconds > ?
+		ORDER BY chapter_index ASC
+		LIMIT 1`, itemID, position, position)
+	var ch Chapter
+	if err := row.Scan(&ch.ID, &ch.ItemID, &ch.ChapterIndex, &ch.Title, &ch.StartSeconds, &ch.EndSeconds, &ch.DurationSeconds); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("chapter not found")
+		}
+		return nil, err
+	}
+	return &ch, nil
 }
 
 // GetPlaybackReporting returns combined playback progress + watch history for a user.

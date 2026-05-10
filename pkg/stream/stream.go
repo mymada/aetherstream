@@ -48,6 +48,8 @@ func (s *Server) RegisterRoutes(e *echo.Echo, authMiddleware echo.MiddlewareFunc
 	g.GET("/:id/dash/:profile/:file", s.handleDASHSegment)
 	g.GET("/:id/probe", s.handleProbe)
 	g.POST("/:id/burnin", s.handleBurnIn)
+	g.GET("/:id/subtitles", s.handleListSubtitles)
+	g.GET("/:id/subtitles/:lang/vtt", s.handleWebVTT)
 }
 
 // handleDirectStream serves the original file (direct play)
@@ -298,6 +300,44 @@ func (s *Server) handleBurnIn(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, result)
+}
+
+// handleListSubtitles returns all subtitle tracks for a video item
+func (s *Server) handleListSubtitles(c echo.Context) error {
+	itemID := c.Param("id")
+	item, err := s.db.GetItemByID(itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+	tracks, err := probe.ExtractSubtitleTracks(item.Path)
+	if err != nil {
+		return c.JSON(http.StatusOK, []map[string]interface{}{})
+	}
+	return c.JSON(http.StatusOK, tracks)
+}
+
+// handleWebVTT serves a WebVTT subtitle for a specific language
+func (s *Server) handleWebVTT(c echo.Context) error {
+	itemID := c.Param("id")
+	lang := c.Param("lang")
+
+	item, err := s.db.GetItemByID(itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+
+	if strings.Contains(lang, "..") || strings.Contains(lang, "/") || strings.Contains(lang, "\\") {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid language parameter")
+	}
+
+	subPath, err := probe.ExtractSubtitleToFile(item.Path, lang)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "subtitle not found")
+	}
+	if !strings.HasPrefix(subPath, os.TempDir()) && !strings.HasPrefix(subPath, "./thumbnails") {
+		return echo.NewHTTPError(http.StatusInternalServerError, "invalid subtitle path")
+	}
+	return c.File(subPath)
 }
 
 // discoverProfiles scans transcode output directory for available profiles
