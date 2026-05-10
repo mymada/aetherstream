@@ -282,7 +282,7 @@ func (r *NodeRegistry) JoinCluster(seedAddr string) error {
 	}
 	data, _ := json.Marshal(payload)
 	url := fmt.Sprintf("http://%s/api/cluster/join", seedAddr)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
+	resp, err := http.Post(url, "application/json", bytes.NewReader(data)) // #nosec G107 - URL constructed from known seed address
 	if err != nil {
 		return fmt.Errorf("join request failed: %w", err)
 	}

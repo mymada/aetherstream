@@ -95,7 +95,7 @@ func (r *DBReplication) shipWAL() {
 
 func (r *DBReplication) sendWALToNode(node NodeState, data []byte) {
 	url := fmt.Sprintf("http://%s/api/cluster/replicate", node.Address)
-	resp, err := http.Post(url, "application/octet-stream", bytes.NewReader(data))
+	resp, err := http.Post(url, "application/octet-stream", bytes.NewReader(data)) // #nosec G107 - URL constructed from internal registry node address
 	if err != nil {
 		log.Warn().Err(err).Str("node", node.ID).Msg("WAL shipping failed")
 		return

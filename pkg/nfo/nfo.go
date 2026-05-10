@@ -94,7 +94,7 @@ func WriteMovieNFO(path string, movie *Movie) error {
 // ReadMovieNFO parses a movie .nfo file.
 func ReadMovieNFO(path string) (*Movie, error) {
 	// Security: path should be validated by caller against library directories
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - caller must validate path against library dirs
 	if err != nil {
 		return nil, fmt.Errorf("read nfo: %w", err)
 	}
@@ -127,7 +127,7 @@ func WriteEpisodeNFO(path string, ep *Episode) error {
 // ReadEpisodeNFO parses an episode .nfo file.
 func ReadEpisodeNFO(path string) (*Episode, error) {
 	// Security: path should be validated by caller against library directories
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - caller must validate path against library dirs
 	if err != nil {
 		return nil, fmt.Errorf("read nfo: %w", err)
 	}

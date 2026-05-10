@@ -3,7 +3,7 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
+    "module": "ES2020",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -20,6 +20,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/components","src/hooks","src/types","src/api.ts","src/App.tsx","src/main.tsx"],
+  "include": ["src/components","src/hooks","src/types","src/api.ts","src/App.tsx","src/main.tsx","e2e"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -201,7 +201,7 @@ func (em *ExternalPluginManager) LoadDirectory(ctx context.Context, dir string) 
 			fmt.Fprintf(os.Stderr, "[plugin] manifest path outside plugin directory: %s\n", path)
 			continue
 		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(cleanPath) // #nosec G304 - path validated above against plugin dir
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[plugin] failed to read manifest %s: %v\n", path, err)
 			continue

@@ -111,7 +111,7 @@ func (s *Server) handleHLSVariant(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
 	}
 
-	content, err := os.ReadFile(playlistPath)
+	content, err := os.ReadFile(cleanPlaylist) // #nosec G304 - path validated above against mediaRoot
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "variant not found")
 	}

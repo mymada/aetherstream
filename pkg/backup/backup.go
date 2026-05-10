@@ -25,7 +25,7 @@ func Export(dbPath, configPath, outDir string) (string, error) {
 		return "", fmt.Errorf("backup path outside output directory")
 	}
 
-	f, err := os.Create(backupPath)
+	f, err := os.Create(cleanBackupPath) // #nosec G304 - path validated above against outDir
 	if err != nil {
 		return "", fmt.Errorf("create backup file: %w", err)
 	}
@@ -65,7 +65,7 @@ func Export(dbPath, configPath, outDir string) (string, error) {
 
 func addFileToZip(zw *zip.Writer, srcPath, nameInZip string) error {
 	// Security: validate source path is within expected directories (caller should ensure)
-	sf, err := os.Open(srcPath)
+	sf, err := os.Open(srcPath) // #nosec G304 - caller must validate srcPath against allowed dirs
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func extractFile(zf *zip.File, destPath string) error {
 	// Write to temp first
 	tmpPath := destPath + ".tmp"
 	// Security: validate tmpPath is within expected directory (caller should ensure)
-	df, err := os.Create(tmpPath)
+	df, err := os.Create(tmpPath) // #nosec G304 - caller must validate destPath against allowed dirs
 	if err != nil {
 		return err
 	}

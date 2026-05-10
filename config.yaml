@@ -1,0 +1,11 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+database:
+  path: "./data/aetherstream.db"
+auth:
+  secret: "test-secret-change-me-in-production"
+  token_ttl: 24
+swiftflow:
+  api_key: ""
+  base_url: ""
