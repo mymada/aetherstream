@@ -15,10 +15,11 @@ RUN go mod download
 # Copy source
 COPY . .
 
-# Build with CGO enabled (required for mattn/go-sqlite3)
+# Build with CGO enabled (required for mattn/go-sqlite3) + FTS5
 ENV CGO_ENABLED=1
 ENV GOOS=linux
 ENV GOARCH=amd64
+ENV CGO_CFLAGS="-DSQLITE_ENABLE_FTS5"
 RUN go build -ldflags='-w -s -extldflags "-static"' -o /bin/aetherstream ./cmd/aetherstream
 
 # Stage 2: Runtime (Alpine with FFmpeg)

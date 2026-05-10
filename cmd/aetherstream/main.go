@@ -20,6 +20,7 @@ import (
 	"github.com/devuser/aetherstream/pkg/auth"
 	"github.com/devuser/aetherstream/pkg/dlna"
 	"github.com/devuser/aetherstream/pkg/library"
+	"github.com/devuser/aetherstream/pkg/metrics"
 	"github.com/devuser/aetherstream/pkg/securestore"
 )
 
@@ -74,6 +75,31 @@ func main() {
 		MaxAge:           86400,
 	}))
 	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
+
+	// Metrics + pprof
+	m := metrics.NewMetrics()
+	e.Use(m.EchoMiddleware())
+	metrics.RegisterPProf(e)
+
+	// Metrics server on port 9090
+	go func() {
+		metricsAddr := ":9090"
+		if cfg.Server.Host != "" && cfg.Server.Host != "0.0.0.0" {
+			metricsAddr = cfg.Server.Host + ":9090"
+		}
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", m.MetricsHandler())
+		log.Info().Str("addr", metricsAddr).Msg("metrics server starting")
+		server := &http.Server{
+			Addr:         metricsAddr,
+			Handler:      mux,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		}
+		if err := server.ListenAndServe(); err != nil {
+			log.Error().Err(err).Msg("metrics server crashed")
+		}
+	}()
 
 	// Library manager
 	libMgr, err := library.NewManager(database, cfg.SwiftFlow.APIKey) // reusing API key slot for TMDb

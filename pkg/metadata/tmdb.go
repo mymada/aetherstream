@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/devuser/aetherstream/pkg/cache"
 )
 
 // TMDbClient fetches movie/TV metadata from The Movie Database
@@ -14,6 +16,7 @@ type TMDbClient struct {
 	apiKey string
 	client *http.Client
 	baseURL string
+	cache   cache.Cache
 }
 
 // NewTMDbClient creates a TMDb API client
@@ -22,7 +25,13 @@ func NewTMDbClient(apiKey string) *TMDbClient {
 		apiKey: apiKey,
 		client: &http.Client{Timeout: 10 * time.Second},
 		baseURL: "https://api.themoviedb.org/3",
+		cache:   cache.NewLRUCache(500),
 	}
+}
+
+// SetCache allows injecting a custom cache implementation (e.g. for tests).
+func (c *TMDbClient) SetCache(cc cache.Cache) {
+	c.cache = cc
 }
 
 // TMDbMovieResult represents a movie search result
@@ -60,6 +69,11 @@ type TMDbMovieDetails struct {
 
 // SearchMovie queries TMDb for movies by title + year
 func (c *TMDbClient) SearchMovie(title string, year int) (*TMDbMovieResult, error) {
+	cacheKey := cache.MetadataKey("movie_search", fmt.Sprintf("%s:%d", title, year))
+	if cached, ok := c.cache.Get(cacheKey); ok {
+		return cached.(*TMDbMovieResult), nil
+	}
+
 	q := url.Values{}
 	q.Set("api_key", c.apiKey)
 	q.Set("query", title)
@@ -89,11 +103,17 @@ func (c *TMDbClient) SearchMovie(title string, year int) (*TMDbMovieResult, erro
 		return nil, nil
 	}
 
+	c.cache.Set(cacheKey, &result.Results[0], 1*time.Hour)
 	return &result.Results[0], nil
 }
 
 // GetMovieDetails fetches full movie metadata by TMDb ID
 func (c *TMDbClient) GetMovieDetails(tmdbID int) (*TMDbMovieDetails, error) {
+	cacheKey := cache.MetadataKey("movie", fmt.Sprintf("%d", tmdbID))
+	if cached, ok := c.cache.Get(cacheKey); ok {
+		return cached.(*TMDbMovieDetails), nil
+	}
+
 	u := fmt.Sprintf("%s/movie/%d?api_key=%s&language=fr-FR", c.baseURL, tmdbID, c.apiKey)
 	resp, err := c.client.Get(u)
 	if err != nil {
@@ -111,6 +131,7 @@ func (c *TMDbClient) GetMovieDetails(tmdbID int) (*TMDbMovieDetails, error) {
 		return nil, fmt.Errorf("tmdb decode: %w", err)
 	}
 
+	c.cache.Set(cacheKey, &details, 1*time.Hour)
 	return &details, nil
 }
 

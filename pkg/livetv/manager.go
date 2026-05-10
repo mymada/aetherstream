@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devuser/aetherstream/pkg/cache"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -33,8 +34,7 @@ type Manager struct {
 	db         *db.DB
 	channels   map[string]*Channel
 	mu         sync.RWMutex
-	epgCache   map[string][]EPGProgram
-	epgMu      sync.RWMutex
+	cache      cache.Cache
 	recDir     string
 	bufferDir  string
 }
@@ -54,7 +54,7 @@ func NewManager(database *db.DB, recDir, bufferDir string) *Manager {
 	return &Manager{
 		db:        database,
 		channels:  make(map[string]*Channel),
-		epgCache:  make(map[string][]EPGProgram),
+		cache:     cache.NewLRUCache(500),
 		recDir:    recDir,
 		bufferDir: bufferDir,
 	}
@@ -164,9 +164,8 @@ func (m *Manager) ParseEPG(path string) error {
 		return fmt.Errorf("parse epg: %w", err)
 	}
 
-	m.epgMu.Lock()
-	defer m.epgMu.Unlock()
-
+	// Aggregate per channel
+	channelMap := make(map[string][]EPGProgram)
 	for _, p := range xmltv.Programmes {
 		start, _ := parseXMLTVTime(p.Start)
 		stop, _ := parseXMLTVTime(p.Stop)
@@ -178,7 +177,11 @@ func (m *Manager) ParseEPG(path string) error {
 			Stop:        stop,
 			Category:    p.Category,
 		}
-		m.epgCache[p.Channel] = append(m.epgCache[p.Channel], prog)
+		channelMap[p.Channel] = append(channelMap[p.Channel], prog)
+	}
+
+	for chID, programs := range channelMap {
+		m.cache.Set(cache.EPGKey(chID), programs, 30*time.Minute)
 	}
 
 	log.Info().Int("channels", len(xmltv.Channels)).Int("programmes", len(xmltv.Programmes)).Msg("EPG loaded")
@@ -187,9 +190,10 @@ func (m *Manager) ParseEPG(path string) error {
 
 // GetEPG returns programs for a channel ID
 func (m *Manager) GetEPG(channelID string) []EPGProgram {
-	m.epgMu.RLock()
-	defer m.epgMu.RUnlock()
-	return m.epgCache[channelID]
+	if cached, ok := m.cache.Get(cache.EPGKey(channelID)); ok {
+		return cached.([]EPGProgram)
+	}
+	return nil
 }
 
 // GetCurrentProgram returns the program currently airing

@@ -1,74 +1,14 @@
 package api
 
 import (
-	"fmt"
-	"path/filepath"
-	"regexp"
-	"strings"
+	"net/http"
+	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/crypto/acme/autocert"
 )
-
-// InputValidator provides reusable validation helpers
-type InputValidator struct{}
-
-// ValidateUUID checks if string is a valid UUID v4 format
-func (v *InputValidator) ValidateUUID(id string) error {
-	re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	if !re.MatchString(id) {
-		return fmt.Errorf("invalid UUID format")
-	}
-	return nil
-}
-
-// ValidatePath ensures path is safe (no traversal)
-func (v *InputValidator) ValidatePath(path string) error {
-	clean := filepath.Clean(path)
-	if strings.Contains(clean, "..") {
-		return fmt.Errorf("path traversal detected")
-	}
-	if strings.HasPrefix(clean, "/") && !strings.HasPrefix(clean, "/media/") {
-		return fmt.Errorf("absolute path not allowed")
-	}
-	return nil
-}
-
-// ValidateUsername ensures username is safe
-func (v *InputValidator) ValidateUsername(username string) error {
-	if len(username) < 3 || len(username) > 32 {
-		return fmt.Errorf("username must be 3-32 characters")
-	}
-	re := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-	if !re.MatchString(username) {
-		return fmt.Errorf("username contains invalid characters")
-	}
-	return nil
-}
-
-// ValidateRole ensures role is valid
-func (v *InputValidator) ValidateRole(role string) error {
-	if role != "admin" && role != "user" {
-		return fmt.Errorf("role must be 'admin' or 'user'")
-	}
-	return nil
-}
-
-// ValidateMediaType ensures media type is valid
-func (v *InputValidator) ValidateMediaType(mt string) error {
-	valid := map[string]bool{"movie": true, "tv": true, "music": true, "mixed": true, "photo": true}
-	if !valid[mt] {
-		return fmt.Errorf("invalid media type")
-	}
-	return nil
-}
-
-// SanitizeString removes dangerous characters
-func SanitizeString(s string) string {
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	return s
-}
 
 // SecurityHeaders middleware adds OWASP recommended headers
 func SecurityHeaders() echo.MiddlewareFunc {
@@ -84,13 +24,114 @@ func SecurityHeaders() echo.MiddlewareFunc {
 	}
 }
 
-// RateLimitPerRoute returns per-route rate limiter
-func RateLimitPerRoute() echo.MiddlewareFunc {
+// --- Rate Limiting ---
+
+type ipBucket struct {
+	tokens    float64
+	lastSeen  time.Time
+	capacity  float64
+	refillRate float64
+}
+
+type ipRateLimiter struct {
+	mu       sync.RWMutex
+	buckets  map[string]*ipBucket
+	capacity float64
+	refill   float64
+}
+
+func newIPRateLimiter(capacity, refillPerMin float64) *ipRateLimiter {
+	rl := &ipRateLimiter{
+		buckets:  make(map[string]*ipBucket),
+		capacity: capacity,
+		refill:   refillPerMin / 60.0,
+	}
+	go rl.cleanup()
+	return rl
+}
+
+func (rl *ipRateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	b, ok := rl.buckets[ip]
+	if !ok {
+		b = &ipBucket{
+			tokens:     rl.capacity,
+			lastSeen:   now,
+			capacity:   rl.capacity,
+			refillRate: rl.refill,
+		}
+		rl.buckets[ip] = b
+	}
+
+	elapsed := now.Sub(b.lastSeen).Seconds()
+	b.lastSeen = now
+	b.tokens += elapsed * b.refillRate
+	if b.tokens > b.capacity {
+		b.tokens = b.capacity
+	}
+
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+func (rl *ipRateLimiter) cleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		for ip, b := range rl.buckets {
+			if now.Sub(b.lastSeen) > 10*time.Minute {
+				delete(rl.buckets, ip)
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+// RateLimitByIP returns middleware that rate-limits by IP with configurable limits
+func RateLimitByIP(requestsPerMin int) echo.MiddlewareFunc {
+	limiter := newIPRateLimiter(float64(requestsPerMin), float64(requestsPerMin))
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Simple IP-based rate limiting could be added here
-			// For now, rely on Echo's global rate limiter
+			ip := c.RealIP()
+			if !limiter.allow(ip) {
+				return echo.NewHTTPError(http.StatusTooManyRequests, "rate limit exceeded")
+			}
 			return next(c)
 		}
+	}
+}
+
+// --- CORS ---
+
+// CORSMiddleware returns Echo CORS middleware configured for AetherStream Web UI
+func CORSMiddleware() echo.MiddlewareFunc {
+	return middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "https://localhost:5173", "https://localhost:8080", "*"},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch},
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestedWith},
+		ExposeHeaders:    []string{echo.HeaderContentLength, echo.HeaderContentType},
+		AllowCredentials: true,
+		MaxAge:           86400,
+	})
+}
+
+// --- Let's Encrypt / TLS ---
+
+// AutoTLSManager creates an autocert.Manager for Let's Encrypt
+func AutoTLSManager(domains []string, cacheDir string) *autocert.Manager {
+	if cacheDir == "" {
+		cacheDir = "./certs"
+	}
+	return &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(domains...),
+		Cache:      autocert.DirCache(cacheDir),
 	}
 }

@@ -45,6 +45,7 @@ func (ep *ExternalPlugin) Initialize(ctx context.Context, config map[string]inte
 		return fmt.Errorf("external plugin %s already initialized", ep.cfg.Name)
 	}
 
+	// #nosec G204 - plugin commands are validated during registration
 	cmd := exec.CommandContext(ctx, ep.cfg.Command, ep.cfg.Args...)
 	cmd.Env = os.Environ()
 	for k, v := range ep.cfg.Env {

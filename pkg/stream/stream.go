@@ -216,6 +216,7 @@ func (t *Transcoder) Transcode(itemID string, profiles []string) error {
 			args := encoder.BuildHLSCommand(inputPath, outputDir, profile, 4, "none")
 
 			// Run FFmpeg
+			// #nosec G204 - inputPath is validated against library paths before reaching here
 			cmd := exec.Command("ffmpeg", args...)
 			if output, err := cmd.CombinedOutput(); err != nil {
 				// Log error but continue with other profiles

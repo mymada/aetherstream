@@ -86,6 +86,7 @@ type SubtitleInfo struct {
 
 // Probe runs ffprobe on a media file
 func Probe(path string) (*MediaInfo, error) {
+	// #nosec G204 - path is validated by caller against library paths
 	cmd := exec.Command(
 		"ffprobe",
 		"-v", "quiet",

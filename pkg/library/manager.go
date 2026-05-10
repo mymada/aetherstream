@@ -2,7 +2,9 @@ package library
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/devuser/aetherstream/pkg/cache"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/metadata"
 	"github.com/devuser/aetherstream/pkg/naming"
@@ -17,6 +19,7 @@ type Manager struct {
 	scanner   *scanner.Scanner
 	tmdb      *metadata.TMDbClient
 	scanQueue chan scanJob
+	cache     cache.Cache
 }
 
 type scanJob struct {
@@ -36,6 +39,7 @@ func NewManager(database *db.DB, tmdbKey string) (*Manager, error) {
 		scanner:   s,
 		tmdb:      metadata.NewTMDbClient(tmdbKey),
 		scanQueue: make(chan scanJob, 10),
+		cache:     cache.NewLRUCache(1000),
 	}
 
 	go m.scanWorker()
@@ -127,8 +131,11 @@ func (m *Manager) processFile(f scanner.MediaFile) error {
 	// Fetch metadata for movies
 	if parsed.Kind == "movie" && m.tmdb != nil {
 		if result, err := m.tmdb.SearchMovie(parsed.Title, parsed.Year); err == nil && result != nil {
-			_, _ = m.tmdb.GetMovieDetails(result.ID)
-			// Metadata stored in DB as JSON — TODO: add metadata column to items table
+			details, _ := m.tmdb.GetMovieDetails(result.ID)
+			if details != nil && details.PosterPath != "" {
+				posterURL := metadata.PosterURL(details.PosterPath, "w500")
+				m.cache.Set(cache.PosterKey(itemID), posterURL, 24*time.Hour)
+			}
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devuser/aetherstream/pkg/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -293,8 +294,8 @@ func TestCacheHit(t *testing.T) {
 	c := NewMusicBrainzClient()
 	c.baseURL = "http://invalid.localhost"
 
-	// Pre-populate cache
-	c.setCache("artist_search:CachedArtist:5", []MBArtist{{ID: "cached-id", Name: "CachedArtist"}}, 10*time.Minute)
+	// Pre-populate cache using the new cache interface
+	c.cache.Set(cache.MetadataKey("artist_search", "CachedArtist:5"), []MBArtist{{ID: "cached-id", Name: "CachedArtist"}}, 10*time.Minute)
 
 	artists, err := c.SearchArtist("CachedArtist", 5)
 	require.NoError(t, err)

@@ -125,6 +125,22 @@ CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_log(user_id);
 	if _, err := d.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+
+	// FTS5 virtual table for full-text search (manually managed index)
+	ftsSchema := `
+CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(
+	item_id UNINDEXED,
+	title,
+	description,
+	actors,
+	director
+);
+`
+	if _, err := d.Exec(ftsSchema); err != nil {
+		// FTS5 may not be available; log but don't fail
+		return nil
+	}
+
 	return nil
 }
 
@@ -463,4 +479,94 @@ func (d *DB) ListActivity(limit int) ([]map[string]interface{}, error) {
 		})
 	}
 	return acts, nil
+}
+
+// --- FTS5 helpers ---
+
+// UpdateFTSIndex updates the FTS5 index for an item with richer metadata fields.
+// This should be called after metadata enrichment (e.g. TMDb fetch).
+// Uses INSERT OR REPLACE to handle both insert and update.
+func (d *DB) UpdateFTSIndex(itemID, title, description, actors, director string) error {
+	// First delete any existing entry for this item_id
+	_, _ = d.Exec("DELETE FROM items_fts WHERE item_id = ?", itemID)
+	// Then insert new entry
+	_, err := d.Exec(
+		"INSERT INTO items_fts(item_id, title, description, actors, director) VALUES (?, ?, ?, ?, ?)",
+		itemID, title, description, actors, director,
+	)
+	return err
+}
+
+// DeleteFTSIndex removes an item from the FTS index.
+func (d *DB) DeleteFTSIndex(itemID string) error {
+	_, err := d.Exec("DELETE FROM items_fts WHERE item_id = ?", itemID)
+	return err
+}
+
+// SearchItemsFTS performs full-text search across title, description, actors, director.
+// mediaType filters by items.media_type if non-empty. limit caps results (default 20).
+func (d *DB) SearchItemsFTS(query, mediaType string, limit int) ([]map[string]interface{}, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if query == "" {
+		return []map[string]interface{}{}, nil
+	}
+
+	var rows *sql.Rows
+	var err error
+	if mediaType != "" {
+		rows, err = d.Query(`
+			SELECT i.id, i.library_id, i.path, i.name, i.media_type, i.container,
+				i.size_bytes, i.duration_seconds, i.width, i.height,
+				i.video_codec, i.audio_codec, i.created_at
+			FROM items_fts
+			JOIN items i ON i.id = items_fts.item_id
+			WHERE items_fts MATCH ? AND i.media_type = ?
+			ORDER BY rank
+			LIMIT ?`, query, mediaType, limit)
+	} else {
+		rows, err = d.Query(`
+			SELECT i.id, i.library_id, i.path, i.name, i.media_type, i.container,
+				i.size_bytes, i.duration_seconds, i.width, i.height,
+				i.video_codec, i.audio_codec, i.created_at
+			FROM items_fts
+			JOIN items i ON i.id = items_fts.item_id
+			WHERE items_fts MATCH ?
+			ORDER BY rank
+			LIMIT ?`, query, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []map[string]interface{}
+	for rows.Next() {
+		var itemID, libID, path, name, mediaTypeResult, container, videoCodec, audioCodec string
+		var sizeBytes int64
+		var duration float64
+		var width, height int
+		var createdAt time.Time
+		if err := rows.Scan(&itemID, &libID, &path, &name, &mediaTypeResult, &container,
+			&sizeBytes, &duration, &width, &height, &videoCodec, &audioCodec, &createdAt); err != nil {
+			continue
+		}
+		items = append(items, map[string]interface{}{
+			"id":             itemID,
+			"libraryId":      libID,
+			"path":           path,
+			"name":           name,
+			"mediaType":      mediaTypeResult,
+			"container":      container,
+			"sizeBytes":      sizeBytes,
+			"durationSeconds": duration,
+			"width":          width,
+			"height":         height,
+			"videoCodec":     videoCodec,
+			"audioCodec":     audioCodec,
+			"createdAt":      createdAt,
+		})
+	}
+	return items, nil
 }

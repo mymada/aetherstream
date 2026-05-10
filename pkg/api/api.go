@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -12,8 +13,10 @@ import (
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/library"
 	"github.com/devuser/aetherstream/pkg/probe"
+	"github.com/devuser/aetherstream/pkg/search"
 	"github.com/devuser/aetherstream/pkg/securestore"
 	"github.com/devuser/aetherstream/pkg/stream"
+	"github.com/devuser/aetherstream/pkg/thumbnail"
 	"github.com/devuser/aetherstream/pkg/ws"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -28,6 +31,8 @@ type Server struct {
 	logger      zerolog.Logger
 	library     *library.Manager
 	secureStore *securestore.Store
+	thumbSvc    *thumbnail.Service
+	searcher    *search.Searcher
 }
 
 // NewServer creates API server
@@ -39,6 +44,8 @@ func NewServer(database *db.DB, authSvc *auth.Service, cfg *config.Config, libMg
 		logger:      zerolog.New(nil),
 		library:     libMgr,
 		secureStore: store,
+		thumbSvc:    thumbnail.NewService(cfg.FFmpeg.Path, "./thumbnails"),
+		searcher:    search.NewSearcher(database),
 	}
 }
 
@@ -47,12 +54,12 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	s.e = e
 
 	// Health / system
-	e.GET("/system/info", s.handleSystemInfo)
+	e.GET("/system/info", s.handleSystemInfo, RateLimitByIP(1000))
 
 	// Auth routes (public)
-	e.POST("/auth/login", s.handleLogin)
-	e.POST("/auth/callback", s.handleAuthCallback)
-	e.POST("/webhooks/swiftflow", s.handleSwiftFlowWebhook)
+	e.POST("/auth/login", s.handleLogin, RateLimitByIP(10))
+	e.POST("/auth/callback", s.handleAuthCallback, RateLimitByIP(10))
+	e.POST("/webhooks/swiftflow", s.handleSwiftFlowWebhook, RateLimitByIP(100))
 
 	// Protected routes
 	api := e.Group("/api")
@@ -72,6 +79,10 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	api.GET("/items/:id", s.handleGetItem)
 	api.GET("/items/:id/subtitles", s.handleListSubtitles)
 	api.GET("/items/:id/subtitles/:lang", s.handleGetSubtitle)
+	api.GET("/items/:id/thumbnails/:type", s.handleGetThumbnail)
+
+	// Search
+	api.GET("/search", s.handleSearch)
 
 	// Users (admin only for write)
 	api.POST("/users", s.handleCreateUser, auth.RequireRole("admin"))
@@ -431,6 +442,32 @@ func (s *Server) handleRemoveFromCollection(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// --- Search ---
+
+func (s *Server) handleSearch(c echo.Context) error {
+	q := c.QueryParam("q")
+	if q == "" {
+		return echo.NewHTTPError(400, "query parameter 'q' required")
+	}
+	mediaType := c.QueryParam("type")
+	limit := 20
+	if l := c.QueryParam("limit"); l != "" {
+		if _, err := fmt.Sscanf(l, "%d", &limit); err != nil {
+			limit = 20
+		}
+	}
+	results, err := s.searcher.SearchItems(q, mediaType, limit)
+	if err != nil {
+		return echo.NewHTTPError(500, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"query":   q,
+		"type":    mediaType,
+		"limit":   limit,
+		"results": results,
+	})
+}
+
 // --- Activity / Dashboard ---
 
 func (s *Server) handleListActivity(c echo.Context) error {
@@ -445,4 +482,42 @@ func (s *Server) handleListActivity(c echo.Context) error {
 
 func (s *Server) handleWebSocket(c echo.Context) error {
 	return ws.HandleWebSocket(c, s.db)
+}
+
+// --- Thumbnails ---
+
+func (s *Server) handleGetThumbnail(c echo.Context) error {
+	itemID := c.Param("id")
+	thumbType := c.Param("type")
+
+	item, err := s.db.GetItemByID(itemID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "item not found")
+	}
+
+	path, ok := item["path"].(string)
+	if !ok || path == "" {
+		return echo.NewHTTPError(http.StatusNotFound, "no file path")
+	}
+
+	var t thumbnail.ThumbnailType
+	switch thumbType {
+	case "poster":
+		t = thumbnail.TypePoster
+	case "backdrop":
+		t = thumbnail.TypeBackdrop
+	default:
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid thumbnail type")
+	}
+
+	// Generate on demand if missing
+	if !s.thumbSvc.Exists(itemID, t) {
+		_, _, err = s.thumbSvc.GenerateThumbnails(path, itemID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "thumbnail generation failed")
+		}
+	}
+
+	thumbPath := s.thumbSvc.Path(itemID, t)
+	return c.File(thumbPath)
 }

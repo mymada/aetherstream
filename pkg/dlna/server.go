@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -760,6 +761,35 @@ func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", item["name"]))
 	w.Header().Set("Accept-Ranges", "bytes")
-	itemPath, _ := item["path"].(string)
+	itemPath, ok := item["path"].(string)
+	if !ok || itemPath == "" {
+		http.Error(w, "invalid item path", http.StatusInternalServerError)
+		return
+	}
+	// Validate path is within media directories to prevent path traversal
+	mediaDirs := []string{"./media"} // default media directory
+	if !isPathInMediaDirs(itemPath, mediaDirs) {
+		http.Error(w, "path not in media directories", http.StatusForbidden)
+		return
+	}
+	// #nosec G703 - path validated above by isPathInMediaDirs
 	http.ServeFile(w, r, itemPath)
+}
+
+// isPathInMediaDirs checks if a path is within any of the allowed media directories
+func isPathInMediaDirs(path string, mediaDirs []string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	for _, dir := range mediaDirs {
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(absPath, absDir+string(filepath.Separator)) || absPath == absDir {
+			return true
+		}
+	}
+	return false
 }

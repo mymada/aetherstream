@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/devuser/aetherstream/pkg/cache"
 )
 
 // MusicBrainzBaseURL is the public API endpoint
@@ -23,13 +25,7 @@ type MusicBrainzClient struct {
 	mu      sync.Mutex
 	lastReq time.Time
 
-	cache   map[string]cacheEntry
-	cacheMu sync.RWMutex
-}
-
-type cacheEntry struct {
-	value      interface{}
-	expiresAt  time.Time
+	cache   cache.Cache
 }
 
 // NewMusicBrainzClient creates a new MusicBrainz API client.
@@ -37,8 +33,13 @@ func NewMusicBrainzClient() *MusicBrainzClient {
 	return &MusicBrainzClient{
 		client:  &http.Client{Timeout: 15 * time.Second},
 		baseURL: MusicBrainzBaseURL,
-		cache:   make(map[string]cacheEntry),
+		cache:   cache.NewLRUCache(500),
 	}
+}
+
+// SetCache allows injecting a custom cache implementation (e.g. for tests).
+func (c *MusicBrainzClient) SetCache(cc cache.Cache) {
+	c.cache = cc
 }
 
 // rateLimit enforces the MusicBrainz rate limit of 1 request per second.
@@ -53,19 +54,11 @@ func (c *MusicBrainzClient) rateLimit() {
 }
 
 func (c *MusicBrainzClient) getCached(key string) (interface{}, bool) {
-	c.cacheMu.RLock()
-	defer c.cacheMu.RUnlock()
-	entry, ok := c.cache[key]
-	if !ok || time.Now().After(entry.expiresAt) {
-		return nil, false
-	}
-	return entry.value, true
+	return c.cache.Get(key)
 }
 
 func (c *MusicBrainzClient) setCache(key string, value interface{}, ttl time.Duration) {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-	c.cache[key] = cacheEntry{value: value, expiresAt: time.Now().Add(ttl)}
+	c.cache.Set(key, value, ttl)
 }
 
 func (c *MusicBrainzClient) doRequest(reqURL string) ([]byte, error) {
@@ -198,7 +191,7 @@ func (c *MusicBrainzClient) SearchArtist(name string, limit int) ([]MBArtist, er
 	if limit <= 0 {
 		limit = 5
 	}
-	cacheKey := "artist_search:" + name + ":" + fmt.Sprintf("%d", limit)
+	cacheKey := cache.MetadataKey("artist_search", name+":"+fmt.Sprintf("%d", limit))
 	if cached, ok := c.getCached(cacheKey); ok {
 		return cached.([]MBArtist), nil
 	}
@@ -219,7 +212,7 @@ func (c *MusicBrainzClient) SearchArtist(name string, limit int) ([]MBArtist, er
 		return nil, fmt.Errorf("musicbrainz artist decode: %w", err)
 	}
 
-	c.setCache(cacheKey, resp.Artists, 10*time.Minute)
+	c.setCache(cacheKey, resp.Artists, 1*time.Hour)
 	return resp.Artists, nil
 }
 
@@ -228,7 +221,7 @@ func (c *MusicBrainzClient) SearchRelease(title string, limit int) ([]MBRelease,
 	if limit <= 0 {
 		limit = 5
 	}
-	cacheKey := "release_search:" + title + ":" + fmt.Sprintf("%d", limit)
+	cacheKey := cache.MetadataKey("release_search", title+":"+fmt.Sprintf("%d", limit))
 	if cached, ok := c.getCached(cacheKey); ok {
 		return cached.([]MBRelease), nil
 	}
@@ -249,7 +242,7 @@ func (c *MusicBrainzClient) SearchRelease(title string, limit int) ([]MBRelease,
 		return nil, fmt.Errorf("musicbrainz release decode: %w", err)
 	}
 
-	c.setCache(cacheKey, resp.Releases, 10*time.Minute)
+	c.setCache(cacheKey, resp.Releases, 1*time.Hour)
 	return resp.Releases, nil
 }
 
@@ -258,7 +251,7 @@ func (c *MusicBrainzClient) SearchTrack(title string, limit int) ([]MBRecording,
 	if limit <= 0 {
 		limit = 5
 	}
-	cacheKey := "track_search:" + title + ":" + fmt.Sprintf("%d", limit)
+	cacheKey := cache.MetadataKey("track_search", title+":"+fmt.Sprintf("%d", limit))
 	if cached, ok := c.getCached(cacheKey); ok {
 		return cached.([]MBRecording), nil
 	}
@@ -279,13 +272,13 @@ func (c *MusicBrainzClient) SearchTrack(title string, limit int) ([]MBRecording,
 		return nil, fmt.Errorf("musicbrainz recording decode: %w", err)
 	}
 
-	c.setCache(cacheKey, resp.Recordings, 10*time.Minute)
+	c.setCache(cacheKey, resp.Recordings, 1*time.Hour)
 	return resp.Recordings, nil
 }
 
 // GetArtist fetches full artist details by MBID (XML endpoint).
 func (c *MusicBrainzClient) GetArtist(mbid string) (*MBArtist, error) {
-	cacheKey := "artist:" + mbid
+	cacheKey := cache.MetadataKey("artist", mbid)
 	if cached, ok := c.getCached(cacheKey); ok {
 		return cached.(*MBArtist), nil
 	}
@@ -301,13 +294,13 @@ func (c *MusicBrainzClient) GetArtist(mbid string) (*MBArtist, error) {
 		return nil, fmt.Errorf("musicbrainz artist xml decode: %w", err)
 	}
 
-	c.setCache(cacheKey, &wrapper.Artist, 30*time.Minute)
+	c.setCache(cacheKey, &wrapper.Artist, 1*time.Hour)
 	return &wrapper.Artist, nil
 }
 
 // GetRelease fetches full release (album) details by MBID with tracks (XML endpoint).
 func (c *MusicBrainzClient) GetRelease(mbid string) (*MBRelease, error) {
-	cacheKey := "release:" + mbid
+	cacheKey := cache.MetadataKey("release", mbid)
 	if cached, ok := c.getCached(cacheKey); ok {
 		return cached.(*MBRelease), nil
 	}
@@ -323,13 +316,13 @@ func (c *MusicBrainzClient) GetRelease(mbid string) (*MBRelease, error) {
 		return nil, fmt.Errorf("musicbrainz release xml decode: %w", err)
 	}
 
-	c.setCache(cacheKey, &wrapper.Release, 30*time.Minute)
+	c.setCache(cacheKey, &wrapper.Release, 1*time.Hour)
 	return &wrapper.Release, nil
 }
 
 // GetRecording fetches full recording details by MBID (XML endpoint).
 func (c *MusicBrainzClient) GetRecording(mbid string) (*MBRecording, error) {
-	cacheKey := "recording:" + mbid
+	cacheKey := cache.MetadataKey("recording", mbid)
 	if cached, ok := c.getCached(cacheKey); ok {
 		return cached.(*MBRecording), nil
 	}
@@ -345,7 +338,7 @@ func (c *MusicBrainzClient) GetRecording(mbid string) (*MBRecording, error) {
 		return nil, fmt.Errorf("musicbrainz recording xml decode: %w", err)
 	}
 
-	c.setCache(cacheKey, &wrapper.Recording, 30*time.Minute)
+	c.setCache(cacheKey, &wrapper.Recording, 1*time.Hour)
 	return &wrapper.Recording, nil
 }
 
