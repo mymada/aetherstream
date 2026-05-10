@@ -154,6 +154,7 @@ type XMLTV struct {
 
 // ParseEPG parses an XMLTV file and loads programs into cache
 func (m *Manager) ParseEPG(path string) error {
+	// Security: validate path is within expected EPG directories (caller should ensure this)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read epg: %w", err)

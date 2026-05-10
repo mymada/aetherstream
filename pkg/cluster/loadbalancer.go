@@ -60,7 +60,7 @@ func (lb *LoadBalancer) Next() (NodeState, bool) {
 	if len(nodes) == 0 {
 		return NodeState{}, false
 	}
-	idx := int(atomic.AddUint64(&lb.counter, 1)-1) % len(nodes)
+	idx := int((atomic.AddUint64(&lb.counter, 1)-1) % uint64(len(nodes))) // #nosec G115 — safe: counter wraps naturally, nodes slice bounds checked above
 	return nodes[idx], true
 }
 

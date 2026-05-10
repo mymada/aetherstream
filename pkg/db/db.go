@@ -168,6 +168,78 @@ CREATE TABLE IF NOT EXISTS items_fts (
 		return nil
 	}
 
+	// Trickplay images
+	trickplaySchema := `
+CREATE TABLE IF NOT EXISTS trickplay_images (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	image_path TEXT NOT NULL,
+	position_seconds REAL NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_trickplay_item ON trickplay_images(item_id);
+`
+	if _, err := d.Exec(trickplaySchema); err != nil {
+		return fmt.Errorf("migrate trickplay: %w", err)
+	}
+
+	// Tags
+	tagsSchema := `
+CREATE TABLE IF NOT EXISTS tags (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT UNIQUE NOT NULL
+);
+CREATE TABLE IF NOT EXISTS item_tags (
+	item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (item_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_item_tags_tag ON item_tags(tag_id);
+`
+	if _, err := d.Exec(tagsSchema); err != nil {
+		return fmt.Errorf("migrate tags: %w", err)
+	}
+
+	// Smart playlists
+	smartSchema := `
+CREATE TABLE IF NOT EXISTS smart_playlists (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	rules TEXT NOT NULL DEFAULT '[]',
+	item_limit INTEGER DEFAULT 100,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_smart_playlists_user ON smart_playlists(user_id);
+`
+	if _, err := d.Exec(smartSchema); err != nil {
+		return fmt.Errorf("migrate smart_playlists: %w", err)
+	}
+
+	// Auto collections
+	autoColSchema := `
+CREATE TABLE IF NOT EXISTS auto_collections (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	group_by TEXT NOT NULL,
+	value TEXT NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS auto_collection_items (
+	collection_id TEXT NOT NULL REFERENCES auto_collections(id) ON DELETE CASCADE,
+	item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (collection_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_auto_collections_user ON auto_collections(user_id);
+CREATE INDEX IF NOT EXISTS idx_auto_collections_group ON auto_collections(group_by, value);
+`
+	if _, err := d.Exec(autoColSchema); err != nil {
+		return fmt.Errorf("migrate auto_collections: %w", err)
+	}
+
 	return nil
 }
 

@@ -1,0 +1,1012 @@
+{
+	"Golang errors": {},
+	"Issues": [
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/stream/stream.go",
+			"code": "113: \n114: \tcontent, err := os.ReadFile(playlistPath)\n115: \tif err != nil {\n",
+			"line": "114",
+			"column": "18",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/plugin/external.go",
+			"code": "203: \t\t}\n204: \t\tdata, err := os.ReadFile(path)\n205: \t\tif err != nil {\n",
+			"line": "204",
+			"column": "16",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
+			"code": "129: \t// Security: path should be validated by caller against library directories\n130: \tdata, err := os.ReadFile(path)\n131: \tif err != nil {\n",
+			"line": "130",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
+			"code": "96: \t// Security: path should be validated by caller against library directories\n97: \tdata, err := os.ReadFile(path)\n98: \tif err != nil {\n",
+			"line": "97",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
+			"code": "157: \t// Security: validate path is within expected EPG directories (caller should ensure this)\n158: \tdata, err := os.ReadFile(path)\n159: \tif err != nil {\n",
+			"line": "158",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "142: \t// Security: validate tmpPath is within expected directory (caller should ensure)\n143: \tdf, err := os.Create(tmpPath)\n144: \tif err != nil {\n",
+			"line": "143",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "67: \t// Security: validate source path is within expected directories (caller should ensure)\n68: \tsf, err := os.Open(srcPath)\n69: \tif err != nil {\n",
+			"line": "68",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "27: \n28: \tf, err := os.Create(backupPath)\n29: \tif err != nil {\n",
+			"line": "28",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/replication.go",
+			"code": "97: \turl := fmt.Sprintf(\"http://%s/api/cluster/replicate\", node.Address)\n98: \tresp, err := http.Post(url, \"application/octet-stream\", bytes.NewReader(data))\n99: \tif err != nil {\n",
+			"line": "98",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/registry.go",
+			"code": "284: \turl := fmt.Sprintf(\"http://%s/api/cluster/join\", seedAddr)\n285: \tresp, err := http.Post(url, \"application/json\", bytes.NewReader(data))\n286: \tif err != nil {\n",
+			"line": "285",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "409",
+				"url": "https://cwe.mitre.org/data/definitions/409.html"
+			},
+			"rule_id": "G110",
+			"details": "Potential DoS vulnerability via decompression bomb",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "146: \t}\n147: \t_, err = io.Copy(df, rc)\n148: \tdf.Close()\n",
+			"line": "147",
+			"column": "11",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G302",
+			"details": "Expect file permissions to be 0600 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/replication.go",
+			"code": "120: \t// Append received WAL data\n121: \tf, err := os.OpenFile(r.walPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)\n122: \tif err != nil {\n",
+			"line": "121",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/trickplay/trickplay.go",
+			"code": "46: func (s *Service) Generate(videoPath, itemID string, durationSeconds float64) ([]string, error) {\n47: \tif err := os.MkdirAll(s.outputDir, 0755); err != nil {\n48: \t\treturn nil, fmt.Errorf(\"mkdir: %w\", err)\n",
+			"line": "47",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/thumbnail/thumbnail.go",
+			"code": "78: \n79: \tif err := os.MkdirAll(s.outputDir, 0755); err != nil {\n80: \t\treturn \"\", fmt.Errorf(\"mkdir: %w\", err)\n",
+			"line": "79",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/stream/stream.go",
+			"code": "219: \t\t\toutputDir := filepath.Join(t.mediaRoot, \"transcodes\", itemID, profileName)\n220: \t\t\tos.MkdirAll(outputDir, 0755)\n221: \n",
+			"line": "220",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
+			"code": "115: func WriteEpisodeNFO(path string, ep *Episode) error {\n116: \tif err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {\n117: \t\treturn fmt.Errorf(\"mkdir: %w\", err)\n",
+			"line": "116",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
+			"code": "82: func WriteMovieNFO(path string, movie *Movie) error {\n83: \tif err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {\n84: \t\treturn fmt.Errorf(\"mkdir: %w\", err)\n",
+			"line": "83",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
+			"code": "329: func NewTimeshiftBuffer(dir string, maxSegments int) *TimeshiftBuffer {\n330: \tos.MkdirAll(dir, 0755)\n331: \treturn \u0026TimeshiftBuffer{\n",
+			"line": "330",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
+			"code": "123: \theader := []byte(xml.Header + string(out) + \"\\n\")\n124: \treturn os.WriteFile(path, header, 0644)\n125: }\n",
+			"line": "124",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/nfo/nfo.go",
+			"code": "90: \theader := []byte(xml.Header + string(out) + \"\\n\")\n91: \treturn os.WriteFile(path, header, 0644)\n92: }\n",
+			"line": "91",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
+			"code": "343: \tpath := filepath.Join(b.dir, fmt.Sprintf(\"segment_%d.ts\", time.Now().Unix()))\n344: \tif err := os.WriteFile(path, data, 0644); err != nil {\n345: \t\treturn \"\", err\n",
+			"line": "344",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/home/devuser/dev/aetherstream/pkg/hls/hls.go",
+			"code": "117: func WritePlaylist(path, content string) error {\n118: \treturn os.WriteFile(path, []byte(content), 0644)\n119: }\n",
+			"line": "118",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/ws/hub.go",
+			"code": "112: \t\tcase \u003c-ticker.C:\n113: \t\t\tc.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))\n114: \t\t\tif err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {\n",
+			"line": "113",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/ws/hub.go",
+			"code": "109: \t\t\t}\n110: \t\t\tc.conn.WriteMessage(websocket.TextMessage, message)\n111: \n",
+			"line": "110",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/ws/hub.go",
+			"code": "106: \t\t\tif !ok {\n107: \t\t\t\tc.conn.WriteMessage(websocket.CloseMessage, []byte{})\n108: \t\t\t\treturn\n",
+			"line": "107",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/ws/hub.go",
+			"code": "104: \t\tcase message, ok := \u003c-c.send:\n105: \t\t\tc.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))\n106: \t\t\tif !ok {\n",
+			"line": "105",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/ws/hub.go",
+			"code": "98: \t\tticker.Stop()\n99: \t\tc.conn.Close()\n100: \t}()\n",
+			"line": "99",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/ws/hub.go",
+			"code": "69: \t\tglobalHub.mu.Unlock()\n70: \t\tconn.Close()\n71: \t}()\n",
+			"line": "70",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/stream/stream.go",
+			"code": "219: \t\t\toutputDir := filepath.Join(t.mediaRoot, \"transcodes\", itemID, profileName)\n220: \t\t\tos.MkdirAll(outputDir, 0755)\n221: \n",
+			"line": "220",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/scanner/scanner.go",
+			"code": "175: \t\t\t\tif info.IsDir() {\n176: \t\t\t\t\ts.watcher.Add(event.Name)\n177: \t\t\t\t\tcontinue\n",
+			"line": "176",
+			"column": "6",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/performance/etag.go",
+			"code": "151: \tif r.body.Len() \u003e 0 {\n152: \t\tio.WriteString(r.original, r.body.String())\n153: \t}\n",
+			"line": "152",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/performance/brotli.go",
+			"code": "120: \tif r.body.Len() \u003e 0 {\n121: \t\tio.WriteString(r.original, r.body.String())\n122: \t}\n",
+			"line": "121",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
+			"code": "356: \t\toldest := b.segments[0]\n357: \t\tos.Remove(oldest.Path)\n358: \t\tb.segments = b.segments[1:]\n",
+			"line": "357",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
+			"code": "329: func NewTimeshiftBuffer(dir string, maxSegments int) *TimeshiftBuffer {\n330: \tos.MkdirAll(dir, 0755)\n331: \treturn \u0026TimeshiftBuffer{\n",
+			"line": "330",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
+			"code": "305: \n306: \tio.Copy(f, resp.Body)\n307: \trec.Status = \"completed\"\n",
+			"line": "306",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/livetv/manager.go",
+			"code": "302: \t\t\u003c-done\n303: \t\tresp.Body.Close()\n304: \t}()\n",
+			"line": "303",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "718: \u003c/s:Envelope\u003e`, code, xmlEscape(desc))\n719: \tw.Write([]byte(output))\n720: }\n",
+			"line": "719",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "697: \u003c/s:Envelope\u003e`\n698: \tw.Write([]byte(output))\n699: }\n",
+			"line": "698",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "677: \u003c/s:Envelope\u003e`\n678: \tw.Write([]byte(output))\n679: }\n",
+			"line": "678",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "663: \u003c/s:Envelope\u003e`\n664: \tw.Write([]byte(output))\n665: }\n",
+			"line": "664",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "526: \u003c/s:Envelope\u003e`, xmlEscape(result))\n527: \tw.Write([]byte(output))\n528: }\n",
+			"line": "527",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "465: \u003c/s:Envelope\u003e`, xmlEscape(result), total, total, 1)\n466: \tw.Write([]byte(output))\n467: }\n",
+			"line": "466",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "314: \tvar buf bytes.Buffer\n315: \txml.EscapeText(\u0026buf, []byte(s))\n316: \treturn buf.String()\n",
+			"line": "315",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "261: \tw.Header().Set(\"Content-Type\", \"application/xml\")\n262: \tw.Write([]byte(s.buildDeviceDescription()))\n263: }\n",
+			"line": "262",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "243: \tdefer conn.Close()\n244: \tconn.Write([]byte(response))\n245: }\n",
+			"line": "244",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "185: \n186: \t\ts.ssdpConn.SetReadDeadline(time.Now().Add(1 * time.Second))\n187: \t\tn, remoteAddr, err := s.ssdpConn.ReadFromUDP(buf)\n",
+			"line": "186",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "156: \t\tconn.Write([]byte(msg))\n157: \t\tconn.Close()\n158: \t}\n",
+			"line": "157",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "155: \t\t}\n156: \t\tconn.Write([]byte(msg))\n157: \t\tconn.Close()\n",
+			"line": "156",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/dlna/server.go",
+			"code": "91: \tif s.ssdpConn != nil {\n92: \t\ts.ssdpConn.Close()\n93: \t}\n",
+			"line": "92",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/server.go",
+			"code": "138: \tc.Response().WriteHeader(resp.StatusCode)\n139: \tio.Copy(c.Response().Writer, resp.Body)\n140: \treturn nil\n",
+			"line": "139",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/registry.go",
+			"code": "210: \tif r.gossipConn != nil {\n211: \t\tr.gossipConn.WriteToUDP(data, remote)\n212: \t}\n",
+			"line": "211",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/registry.go",
+			"code": "196: \tif r.gossipConn != nil {\n197: \t\tr.gossipConn.WriteToUDP(data, addr)\n198: \t}\n",
+			"line": "197",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/registry.go",
+			"code": "129: \tif r.gossipConn != nil {\n130: \t\tr.gossipConn.Close()\n131: \t}\n",
+			"line": "130",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cluster/registry.go",
+			"code": "85: \t\t\t}\n86: \t\t\tconn.SetReadDeadline(time.Now().Add(1 * time.Second))\n87: \t\t\tn, remote, err := conn.ReadFromUDP(buf)\n",
+			"line": "86",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cast/chromecast.go",
+			"code": "259: \t}\n260: \tresp.Body.Close()\n261: \n",
+			"line": "260",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cast/chromecast.go",
+			"code": "159: \n160: \t\tconn.SetReadDeadline(time.Now().Add(1 * time.Second))\n161: \t\tn, remoteAddr, err := conn.ReadFromUDP(buf)\n",
+			"line": "160",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/cast/airplay.go",
+			"code": "223: \t}\n224: \tresp.Body.Close()\n225: }\n",
+			"line": "224",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "149: \tif err != nil {\n150: \t\tos.Remove(tmpPath)\n151: \t\treturn err\n",
+			"line": "150",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "147: \t_, err = io.Copy(df, rc)\n148: \tdf.Close()\n149: \tif err != nil {\n",
+			"line": "148",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "103: \t\t\t}\n104: \t\t\trc.Close()\n105: \t\t\tfoundManifest = true\n",
+			"line": "104",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/backup/backup.go",
+			"code": "100: \t\t\tif err := json.NewDecoder(rc).Decode(\u0026manifest); err != nil {\n101: \t\t\t\trc.Close()\n102: \t\t\t\treturn fmt.Errorf(\"decode manifest: %w\", err)\n",
+			"line": "101",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/home/devuser/dev/aetherstream/pkg/autocollections/autocollections.go",
+			"code": "175: \t\t}\n176: \t\titemRows.Close()\n177: \t}\n",
+			"line": "176",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 56,
+		"lines": 11148,
+		"nosec": 11,
+		"found": 62
+	},
+	"GosecVersion": "dev"
+}

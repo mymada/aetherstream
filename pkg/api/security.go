@@ -18,8 +18,8 @@ import (
 
 // --- CSRF Protection ---
 
-const csrfTokenHeader = "X-CSRF-Token"
-const csrfCookieName = "csrf_token"
+const csrfTokenHeader = "X-CSRF-Token" // #nosec G101 — this is a header name constant, not a credential
+const csrfCookieName = "csrf_token"      // #nosec G101 — this is a cookie name constant, not a credential
 
 // generateCSRFToken creates a random 32-byte token encoded as base64.
 func generateCSRFToken() string {

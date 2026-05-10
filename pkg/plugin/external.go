@@ -194,6 +194,13 @@ func (em *ExternalPluginManager) LoadDirectory(ctx context.Context, dir string) 
 		}
 
 		path := filepath.Join(dir, name)
+		// Security: validate manifest path is within plugin directory
+		cleanPath := filepath.Clean(path)
+		cleanDir := filepath.Clean(dir)
+		if !strings.HasPrefix(cleanPath, cleanDir+string(filepath.Separator)) && cleanPath != cleanDir {
+			fmt.Fprintf(os.Stderr, "[plugin] manifest path outside plugin directory: %s\n", path)
+			continue
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[plugin] failed to read manifest %s: %v\n", path, err)

@@ -247,6 +247,19 @@ go vet ./...
 
 ---
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [API Reference](docs/API.md) | Complete endpoint reference, request/response schemas, auth, rate limits |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Docker, systemd, Kubernetes, reverse proxy, GPU setup |
+| [Configuration Reference](docs/CONFIG.md) | Environment variables, YAML options, security checklist |
+| [Troubleshooting Guide](docs/TROUBLESHOOTING.md) | Common issues, symptoms, and fixes |
+| [Contributing Guide](docs/CONTRIBUTING.md) | Development setup, coding standards, PR workflow |
+| [Architecture Decision Records](docs/adr/) | ADRs for key design choices |
+
+---
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.

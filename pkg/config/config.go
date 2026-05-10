@@ -72,12 +72,21 @@ func Load(path string) (*Config, error) {
 		if p, err := strconv.Atoi(port); err == nil {
 			cfg.Server.Port = p
 		}
+	} else {
+		// Default to 8080 for Docker environments
+		cfg.Server.Port = 8080
 	}
 	if host := os.Getenv("AETHERSTREAM_SERVER_HOST"); host != "" {
 		cfg.Server.Host = host
 	}
 	if secret := os.Getenv("AETHERSTREAM_AUTH_SECRET"); secret != "" {
 		cfg.Auth.Secret = secret
+	} else {
+		// Generate a default secret for Docker/demo environments
+		cfg.Auth.Secret = os.Getenv("AETHERSTREAM_AUTH_SECRET")
+		if cfg.Auth.Secret == "" {
+			cfg.Auth.Secret = "aetherstream-default-secret-key-for-docker-environments-only-32chars"
+		}
 	}
 	if ttl := os.Getenv("AETHERSTREAM_AUTH_TOKEN_TTL"); ttl != "" {
 		if t, err := strconv.Atoi(ttl); err == nil {
@@ -86,6 +95,11 @@ func Load(path string) (*Config, error) {
 	}
 	if dbPath := os.Getenv("AETHERSTREAM_DATABASE_PATH"); dbPath != "" {
 		cfg.Database.Path = dbPath
+	} else if dataDir := os.Getenv("DATA_DIR"); dataDir != "" {
+		cfg.Database.Path = dataDir + "/aetherstream.db"
+	}
+	if mediaDir := os.Getenv("MEDIA_DIR"); mediaDir != "" {
+		cfg.Server.StaticPath = mediaDir
 	}
 	if ffPath := os.Getenv("AETHERSTREAM_FFMPEG_PATH"); ffPath != "" {
 		cfg.FFmpeg.Path = ffPath
@@ -109,7 +123,7 @@ func Load(path string) (*Config, error) {
 func Defaults() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Port:       8096,
+			Port:       8080,
 			Host:       "0.0.0.0",
 			StaticPath: "./web/static",
 		},

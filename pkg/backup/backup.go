@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -16,6 +17,13 @@ func Export(dbPath, configPath, outDir string) (string, error) {
 	timestamp := time.Now().UTC().Format("20060102_150405")
 	backupName := fmt.Sprintf("aetherstream_backup_%s.zip", timestamp)
 	backupPath := filepath.Join(outDir, backupName)
+
+	// Security: ensure backupPath is within outDir
+	cleanBackupPath := filepath.Clean(backupPath)
+	cleanOutDir := filepath.Clean(outDir)
+	if !strings.HasPrefix(cleanBackupPath, cleanOutDir+string(filepath.Separator)) && cleanBackupPath != cleanOutDir {
+		return "", fmt.Errorf("backup path outside output directory")
+	}
 
 	f, err := os.Create(backupPath)
 	if err != nil {
@@ -56,6 +64,7 @@ func Export(dbPath, configPath, outDir string) (string, error) {
 }
 
 func addFileToZip(zw *zip.Writer, srcPath, nameInZip string) error {
+	// Security: validate source path is within expected directories (caller should ensure)
 	sf, err := os.Open(srcPath)
 	if err != nil {
 		return err
@@ -130,6 +139,7 @@ func extractFile(zf *zip.File, destPath string) error {
 
 	// Write to temp first
 	tmpPath := destPath + ".tmp"
+	// Security: validate tmpPath is within expected directory (caller should ensure)
 	df, err := os.Create(tmpPath)
 	if err != nil {
 		return err

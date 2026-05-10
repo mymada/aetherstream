@@ -1,35 +1,36 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
-import { AuthProvider, useAuth } from './context/AuthContext'
-import Layout from './components/Layout'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import LibraryPage from './pages/LibraryPage'
-import PlayerPage from './pages/PlayerPage'
-import AdminPage from './pages/AdminPage'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuth } from './hooks/useAuth.ts'
+import LoginPage from './components/LoginPage.tsx'
+import Dashboard from './components/Dashboard.tsx'
+import LibraryBrowser from './components/LibraryBrowser.tsx'
+import MediaPlayer from './components/MediaPlayer.tsx'
+import Settings from './components/Settings.tsx'
+import Layout from './components/Layout.tsx'
 
-function RequireAuth() {
+function App() {
   const { token } = useAuth()
-  return token ? <Layout><Outlet /></Layout> : <Navigate to="/login" replace />
-}
 
-function AppRoutes() {
+  if (!token) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
+  }
+
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route element={<RequireAuth />}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/libraries" element={<LibraryPage />} />
-        <Route path="/player/:id" element={<PlayerPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-      </Route>
-    </Routes>
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/libraries" element={<LibraryBrowser />} />
+        <Route path="/libraries/:libraryId" element={<LibraryBrowser />} />
+        <Route path="/player/:id" element={<MediaPlayer />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
   )
 }
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
-  )
-}
+export default App

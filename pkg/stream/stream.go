@@ -104,6 +104,13 @@ func (s *Server) handleHLSVariant(c echo.Context) error {
 
 	playlistPath := filepath.Join(s.mediaRoot, "transcodes", itemID, profile, "playlist.m3u8")
 
+	// Security: validate path is within mediaRoot before reading
+	cleanPlaylist := filepath.Clean(playlistPath)
+	cleanRoot := filepath.Clean(s.mediaRoot)
+	if !strings.HasPrefix(cleanPlaylist, cleanRoot+string(filepath.Separator)) && cleanPlaylist != cleanRoot {
+		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
+	}
+
 	content, err := os.ReadFile(playlistPath)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "variant not found")

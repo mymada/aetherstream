@@ -73,8 +73,8 @@ func (dl *DistributedLock) Acquire(ctx context.Context, key, holder string, ttl 
 	}
 	dl.locks[key] = entry
 
-	// Start keep-alive goroutine
-	go dl.keepAlive(entry)
+	// Start keep-alive goroutine with background context
+	go dl.keepAlive(context.Background(), entry) // #nosec G118 — background context is correct for a long-lived goroutine
 
 	return true, nil
 }
@@ -100,7 +100,7 @@ func (dl *DistributedLock) IsHeld(key string) bool {
 	return ok
 }
 
-func (dl *DistributedLock) keepAlive(entry *lockEntry) {
+func (dl *DistributedLock) keepAlive(ctx context.Context, entry *lockEntry) {
 	ticker := time.NewTicker(entry.ttl / 3)
 	defer ticker.Stop()
 	for {
@@ -108,8 +108,8 @@ func (dl *DistributedLock) keepAlive(entry *lockEntry) {
 		case <-entry.stopCh:
 			return
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := dl.backend.Refresh(ctx, entry.key, entry.holder, entry.ttl); err != nil {
+			refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			if err := dl.backend.Refresh(refreshCtx, entry.key, entry.holder, entry.ttl); err != nil {
 				cancel()
 				// Lock lost; clean up local state
 				dl.mu.Lock()

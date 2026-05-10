@@ -101,9 +101,13 @@ func TestSecureCookieMiddleware(t *testing.T) {
 }
 
 func TestBruteForceProtection(t *testing.T) {
-	// Reset global brute force state before test
+	// Reset global brute force state before test and ensure cleanup after
 	globalBruteForce.reset("ip:192.0.2.1")
 	globalBruteForce.reset("user:alice")
+	defer func() {
+		globalBruteForce.reset("ip:192.0.2.1")
+		globalBruteForce.reset("user:alice")
+	}()
 
 	e := echo.New()
 	e.Use(BruteForceProtection())

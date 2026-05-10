@@ -65,8 +65,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/content/", s.handleContentDelivery)
 
 	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", s.httpHost, s.httpPort),
-		Handler: mux,
+		Addr:              fmt.Sprintf("%s:%d", s.httpHost, s.httpPort),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {

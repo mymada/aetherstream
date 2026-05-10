@@ -25,14 +25,15 @@ RUN go build -ldflags='-w -s -extldflags "-static"' -o /bin/aetherstream ./cmd/a
 # Stage 2: Runtime (Alpine with FFmpeg)
 FROM alpine:3.21 AS runtime
 
-# Install runtime dependencies: FFmpeg + SSL certs
-RUN apk add --no-cache ffmpeg ffprobe ca-certificates tzdata
-
-# Create non-root user
-RUN adduser -D -u 1000 aetherstream
+# Install runtime dependencies: FFmpeg + SSL certs + su-exec
+RUN apk add --no-cache ffmpeg ca-certificates tzdata su-exec
 
 # Create directories for data and media
-RUN mkdir -p /data /media /app/web/static && chown -R aetherstream:aetherstream /data /app
+RUN mkdir -p /data /media /app/web/static
+
+# Create non-root user with same UID as host (for volume permissions)
+RUN adduser -D -u 1000 aetherstream && \
+    chown -R aetherstream:aetherstream /data /media /app
 
 WORKDIR /app
 
@@ -42,10 +43,12 @@ COPY --from=builder /bin/aetherstream /app/aetherstream
 # Copy web assets if they exist
 COPY --chown=aetherstream:aetherstream web/ /app/web/
 
-# Copy default config (will be overridden by env/volumes)
-COPY --chown=aetherstream:aetherstream config.docker.yaml /app/config.yaml 2>/dev/null || true
+# Copy entrypoint
+COPY --chown=aetherstream:aetherstream docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
-USER aetherstream
+# Don't switch to non-root user — let entrypoint handle permissions
+# USER aetherstream
 
 # Expose API (8080) and DLNA (8097)
 EXPOSE 8080 8097
@@ -54,4 +57,5 @@ EXPOSE 8080 8097
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:8080/system/info || exit 1
 
-ENTRYPOINT ["/app/aetherstream"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/app/aetherstream"]

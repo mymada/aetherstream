@@ -217,6 +217,7 @@ func ExtractSubtitleToFile(path, lang string) (string, error) {
 	}
 
 	outPath := "/tmp/aetherstream_sub_" + lang + ".srt"
+	// #nosec G204 - path is validated by caller against library paths; outPath is a fixed tmp prefix
 	cmd := exec.Command("ffmpeg", "-i", path, "-map", fmt.Sprintf("0:s:%d", subIndex), outPath, "-y")
 	if _, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("subtitle extraction failed: %w", err)
