@@ -112,7 +112,10 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.GET("/ws", s.handleWebSocket, s.auth.Middleware())
 
 	// Stream routes (protected)
-	mediaRoot := s.cfg.Server.StaticPath
+	mediaRoot := s.cfg.Server.MediaRoot
+	if mediaRoot == "" {
+		mediaRoot = s.cfg.Server.StaticPath
+	}
 	if mediaRoot == "" {
 		mediaRoot = "./media"
 	}

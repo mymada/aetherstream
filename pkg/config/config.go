@@ -28,6 +28,8 @@ type ServerConfig struct {
 	Port        int    `koanf:"port"`
 	Host        string `koanf:"host"`
 	StaticPath  string `koanf:"static_path"`
+	WebUIPath   string `koanf:"web_ui_path"`
+	MediaRoot   string `koanf:"media_root"`
 }
 
 // DatabaseConfig SQLite settings
@@ -102,6 +104,12 @@ func Load(path string) (*Config, error) {
 	}
 	if mediaDir := os.Getenv("MEDIA_DIR"); mediaDir != "" {
 		cfg.Server.StaticPath = mediaDir
+		cfg.Server.MediaRoot = mediaDir
+	}
+	if webUIPath := os.Getenv("AETHERSTREAM_WEB_UI_PATH"); webUIPath != "" {
+		cfg.Server.WebUIPath = webUIPath
+	} else {
+		cfg.Server.WebUIPath = "web/dist"
 	}
 	if ffPath := os.Getenv("AETHERSTREAM_FFMPEG_PATH"); ffPath != "" {
 		cfg.FFmpeg.Path = ffPath
@@ -127,7 +135,9 @@ func Defaults() *Config {
 		Server: ServerConfig{
 			Port:       8081,
 			Host:       "0.0.0.0",
-			StaticPath: "./web/static",
+			StaticPath: "./media",
+			WebUIPath:  "web/dist",
+			MediaRoot:  "./media",
 		},
 		Database: DatabaseConfig{
 			Path: "./data/aetherstream.db",

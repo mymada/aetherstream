@@ -117,8 +117,15 @@ func main() {
 	docs.RegisterRoutes(e)
 
 	// Serve Web UI static files on /app — MUST be after API routes
-	e.Static("/app", "web/dist")
-	e.File("/app", "web/dist/index.html")
+	webUIPath := cfg.Server.WebUIPath
+	if webUIPath == "" {
+		webUIPath = "web/dist"
+	}
+	e.Static("/app/assets", webUIPath+"/assets")
+	e.File("/app", webUIPath+"/index.html")
+	e.GET("/app/*", func(c echo.Context) error {
+		return c.File(webUIPath + "/index.html")
+	})
 
 	// DLNA/UPnP server
 	dlnaServer := dlna.NewServer(database, cfg.Server.Host, cfg.Server.Port+1, "AetherStream")
@@ -129,7 +136,7 @@ func main() {
 
 	// Start
 	go func() {
-		addr := fmt.Sprintf(":%d", cfg.Server.Port)
+		addr := fmt.Sprintf("0.0.0.0:%d", cfg.Server.Port)
 		log.Info().Str("addr", addr).Msg("AetherStream starting")
 		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
 			log.Fatal().Err(err).Msg("server crashed")
