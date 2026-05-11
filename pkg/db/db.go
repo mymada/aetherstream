@@ -421,6 +421,28 @@ func (d *DB) ListItemsByLibrary(libraryID string) ([]Item, error) {
 	return items, nil
 }
 
+// ListItemsWithLimit returns recent items across all libraries with a LIMIT (fixes M6)
+func (d *DB) ListItemsWithLimit(limit int) ([]Item, error) {
+	rows, err := d.Query(
+		`SELECT id, library_id, path, name, media_type, container, size_bytes, duration_seconds, width, height, video_codec, audio_codec, created_at
+		 FROM items ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []Item
+	for rows.Next() {
+		var it Item
+		if err := rows.Scan(&it.ID, &it.LibraryID, &it.Path, &it.Name, &it.MediaType, &it.Container,
+			&it.SizeBytes, &it.DurationSeconds, &it.Width, &it.Height, &it.VideoCodec, &it.AudioCodec, &it.CreatedAt); err != nil {
+			continue
+		}
+		items = append(items, it)
+	}
+	return items, nil
+}
+
 // --- Sessions ---
 
 // CreateSession records a new streaming session
@@ -876,12 +898,16 @@ func (d *DB) GetChapterAtPosition(itemID string, position float64) (*Chapter, er
 }
 
 // GetPlaybackReporting returns combined playback progress + watch history for a user.
+// Default limit 1000 per table to prevent OOM (fixes M7).
 func (d *DB) GetPlaybackReporting(userID string) (map[string]interface{}, error) {
+	const limit = 1000
+
 	progressRows, err := d.Query(`
 		SELECT user_id, item_id, position_seconds, duration_seconds, percent_complete, updated_at
 		FROM playback_progress
 		WHERE user_id = ?
-		ORDER BY updated_at DESC`, userID)
+		ORDER BY updated_at DESC
+		LIMIT ?`, userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -900,7 +926,8 @@ func (d *DB) GetPlaybackReporting(userID string) (map[string]interface{}, error)
 		SELECT id, user_id, item_id, position_seconds, duration_seconds, watched, watched_at
 		FROM watch_history
 		WHERE user_id = ?
-		ORDER BY watched_at DESC`, userID)
+		ORDER BY watched_at DESC
+		LIMIT ?`, userID, limit)
 	if err != nil {
 		return nil, err
 	}

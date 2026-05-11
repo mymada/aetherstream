@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devuser/aetherstream/pkg/config"
 	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,8 @@ import (
 
 func TestCSRFProtection(t *testing.T) {
 	e := echo.New()
-	e.Use(CSRFProtection())
+	cfg := &config.Config{}
+	e.Use(CSRFProtection(cfg))
 	e.POST("/test", func(c echo.Context) error {
 		return c.String(http.StatusOK, "ok")
 	})

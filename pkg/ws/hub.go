@@ -20,7 +20,7 @@ var upgrader = websocket.Upgrader{
 
 // Hub manages all WebSocket connections
 type Hub struct {
-	clients map[string]*Client // key = userID
+	clients map[string]*Client // key = userID-deviceID
 	mu      sync.RWMutex
 }
 
@@ -31,19 +31,23 @@ type Client struct {
 	send     chan []byte
 }
 
-var globalHub = &Hub{
-	clients: make(map[string]*Client),
+var (
+	globalHub     *Hub
+	globalHubOnce sync.Once
+)
+
+func getGlobalHub() *Hub {
+	globalHubOnce.Do(func() {
+		globalHub = &Hub{
+			clients: make(map[string]*Client),
+		}
+	})
+	return globalHub
 }
 
 // HandleWebSocket upgrades HTTP to WebSocket
 func HandleWebSocket(c echo.Context, database *db.DB) error {
-	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
-	if err != nil {
-		log.Warn().Err(err).Msg("websocket upgrade failed")
-		return err
-	}
-
-	// Reject WebSocket connections that try to pass a token via query params.
+	// Validate BEFORE upgrade (fixes H3)
 	if c.QueryParam("token") != "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "token must not be passed via query parameters")
 	}
@@ -52,6 +56,14 @@ func HandleWebSocket(c echo.Context, database *db.DB) error {
 	if claims == nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	}
+
+	// Now upgrade
+	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+	if err != nil {
+		log.Warn().Err(err).Msg("websocket upgrade failed")
+		return err
+	}
+
 	userID := claims.UserID
 	if userID == "" {
 		userID = "anonymous"
@@ -68,20 +80,25 @@ func HandleWebSocket(c echo.Context, database *db.DB) error {
 		send:     make(chan []byte, 256),
 	}
 
-	globalHub.mu.Lock()
-	globalHub.clients[userID+"-"+deviceID] = client
-	globalHub.mu.Unlock()
+	hub := getGlobalHub()
+	hub.mu.Lock()
+	hub.clients[userID+"-"+deviceID] = client
+	hub.mu.Unlock()
 
-	// Cleanup on disconnect
+	// Cleanup on disconnect: close send channel, remove from hub, close conn
 	defer func() {
-		globalHub.mu.Lock()
-		delete(globalHub.clients, userID+"-"+deviceID)
-		globalHub.mu.Unlock()
+		hub.mu.Lock()
+		delete(hub.clients, userID+"-"+deviceID)
+		hub.mu.Unlock()
+		close(client.send)
 		_ = conn.Close()
 	}()
 
 	// Send welcome
-	client.send <- []byte(`{"type":"connected","server":"AetherStream"}`)
+	select {
+	case client.send <- []byte(`{"type":"connected","server":"AetherStream"}`):
+	default:
+	}
 
 	// Writer goroutine
 	go client.writePump()
@@ -135,9 +152,10 @@ func handleMessage(client *Client, msg []byte, database *db.DB) {
 
 // Broadcast sends a message to all connected clients
 func Broadcast(msg []byte) {
-	globalHub.mu.RLock()
-	defer globalHub.mu.RUnlock()
-	for _, client := range globalHub.clients {
+	hub := getGlobalHub()
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	for _, client := range hub.clients {
 		select {
 		case client.send <- msg:
 		default:
@@ -148,9 +166,10 @@ func Broadcast(msg []byte) {
 
 // BroadcastToUser sends to all devices of a specific user
 func BroadcastToUser(userID string, msg []byte) {
-	globalHub.mu.RLock()
-	defer globalHub.mu.RUnlock()
-	for key, client := range globalHub.clients {
+	hub := getGlobalHub()
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	for key, client := range hub.clients {
 		if len(key) > len(userID) && key[:len(userID)] == userID {
 			select {
 			case client.send <- msg:

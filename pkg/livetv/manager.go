@@ -1,6 +1,7 @@
 package livetv
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -20,23 +21,23 @@ import (
 
 // Channel represents a TV channel with streaming source
 type Channel struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Number   int    `json:"number"`
-	SourceURL string `json:"source_url"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Number     int    `json:"number"`
+	SourceURL  string `json:"source_url"`
 	SourceType string `json:"source_type"` // iptv, dvb, http
-	LogoURL  string `json:"logo_url,omitempty"`
-	Enabled  bool   `json:"enabled"`
+	LogoURL    string `json:"logo_url,omitempty"`
+	Enabled    bool   `json:"enabled"`
 }
 
 // Manager handles live TV channels, EPG, recording, timeshift
 type Manager struct {
-	db         *db.DB
-	channels   map[string]*Channel
-	mu         sync.RWMutex
-	cache      cache.Cache
-	recDir     string
-	bufferDir  string
+	db        *db.DB
+	channels  map[string]*Channel
+	mu        sync.RWMutex
+	cache     cache.Cache
+	recDir    string
+	bufferDir string
 }
 
 // EPGProgram represents a TV program from XMLTV
@@ -138,17 +139,17 @@ type XMLTVChannel struct {
 
 // XMLTVProgramme represents a programme in XMLTV
 type XMLTVProgramme struct {
-	Channel     string   `xml:"channel,attr"`
-	Start       string   `xml:"start,attr"`
-	Stop        string   `xml:"stop,attr"`
-	Title       string   `xml:"title"`
-	Desc        string   `xml:"desc"`
-	Category    string   `xml:"category"`
+	Channel  string `xml:"channel,attr"`
+	Start    string `xml:"start,attr"`
+	Stop     string `xml:"stop,attr"`
+	Title    string `xml:"title"`
+	Desc     string `xml:"desc"`
+	Category string `xml:"category"`
 }
 
 // XMLTV represents the root XMLTV document
 type XMLTV struct {
-	Channels  []XMLTVChannel   `xml:"channel"`
+	Channels   []XMLTVChannel   `xml:"channel"`
 	Programmes []XMLTVProgramme `xml:"programme"`
 }
 
@@ -234,6 +235,7 @@ type Recording struct {
 	StopTime  time.Time `json:"stop_time"`
 	FilePath  string    `json:"file_path"`
 	Status    string    `json:"status"` // scheduled, recording, completed, failed
+	mu        sync.Mutex
 }
 
 // ScheduleRecording schedules a recording
@@ -272,18 +274,28 @@ func (m *Manager) StartRecording(channelID string, duration time.Duration) (*Rec
 		Status:    "recording",
 	}
 
-	// Start background recording
-	go m.recordStream(ch, rec)
+	// Start background recording with context for cancellation/timeout
+	go m.recordStream(ch, rec, duration)
 
 	return rec, nil
 }
 
-// recordStream records a channel to disk
-func (m *Manager) recordStream(ch *Channel, rec *Recording) {
-	resp, err := http.Get(ch.SourceURL)
+// recordStream records a channel to disk with proper lifecycle management
+func (m *Manager) recordStream(ch *Channel, rec *Recording, duration time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), duration+30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ch.SourceURL, nil)
+	if err != nil {
+		log.Error().Err(err).Str("channel", ch.Name).Msg("recording request failed")
+		rec.setStatus("failed")
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Error().Err(err).Str("channel", ch.Name).Msg("recording failed")
-		rec.Status = "failed"
+		rec.setStatus("failed")
 		return
 	}
 	defer resp.Body.Close()
@@ -291,26 +303,26 @@ func (m *Manager) recordStream(ch *Channel, rec *Recording) {
 	f, err := os.OpenFile(rec.FilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0640)
 	if err != nil {
 		log.Error().Err(err).Str("path", rec.FilePath).Msg("recording file create failed")
-		rec.Status = "failed"
+		rec.setStatus("failed")
 		return
 	}
 	defer f.Close()
 
-	// Copy with timeout
-	done := time.After(rec.StopTime.Sub(time.Now()))
-	go func() {
-		<-done
-		_ = resp.Body.Close()
-	}()
-
+	// Copy with context cancellation
 	_, err = io.Copy(f, resp.Body)
 	if err != nil {
 		log.Error().Err(err).Str("recording", rec.ID).Msg("recording copy failed")
-		rec.Status = "failed"
+		rec.setStatus("failed")
 		return
 	}
-	rec.Status = "completed"
+	rec.setStatus("completed")
 	log.Info().Str("recording", rec.ID).Str("channel", ch.Name).Msg("recording completed")
+}
+
+func (r *Recording) setStatus(status string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.Status = status
 }
 
 // --- Timeshift ---

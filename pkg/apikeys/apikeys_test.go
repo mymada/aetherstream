@@ -29,7 +29,7 @@ func TestGenerateAPIKey(t *testing.T) {
 	assert.True(t, strings.HasPrefix(raw, "ak_"))
 	assert.NotEmpty(t, key.ID)
 	assert.Equal(t, "test-key", key.Name)
-	assert.Equal(t, raw[:7], key.Prefix)
+	assert.Equal(t, raw[:11], key.Prefix)
 	assert.NotEmpty(t, key.Hash)
 	assert.Equal(t, []string{"read", "write"}, key.Scopes)
 }
@@ -64,7 +64,7 @@ func TestValidateAPIKey(t *testing.T) {
 	wrongKey := raw2[:len(raw2)-1] + "x"
 	_, err = s.Validate(wrongKey)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid key")
+	assert.Contains(t, err.Error(), "key not found")
 }
 
 func TestHashAPIKey(t *testing.T) {

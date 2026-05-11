@@ -34,7 +34,7 @@ func generateCSRFToken() string {
 // CSRFProtection returns middleware that validates CSRF tokens on state-changing methods.
 // It expects the token in the X-CSRF-Token header or in a form field named "csrf_token".
 // A cookie named csrf_token is set on GET/HEAD/OPTIONS requests if missing.
-func CSRFProtection() echo.MiddlewareFunc {
+func CSRFProtection(cfg *config.Config) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			method := c.Request().Method
@@ -43,13 +43,15 @@ func CSRFProtection() echo.MiddlewareFunc {
 				cookie, err := c.Cookie(csrfCookieName)
 				if err != nil || cookie.Value == "" {
 					newToken := generateCSRFToken()
-					c.SetCookie(&http.Cookie{ // #nosec G124 — CSRF cookie config intentionally lax for HTTP local dev
+					// Secure flag based on HTTPS config (fixes M8)
+					secure := c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https"
+					c.SetCookie(&http.Cookie{
 						Name:     csrfCookieName,
 						Value:    newToken,
 						Path:     "/",
 						HttpOnly: true,
 						SameSite: http.SameSiteLaxMode,
-						Secure:   false,
+						Secure:   secure,
 						MaxAge:   86400,
 					})
 				}
@@ -175,15 +177,22 @@ type bruteForceLimiter struct {
 	mu       sync.RWMutex
 	attempts map[string]*loginAttempt
 	maxDelay time.Duration
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 func newBruteForceLimiter() *bruteForceLimiter {
 	b := &bruteForceLimiter{
 		attempts: make(map[string]*loginAttempt),
 		maxDelay: 30 * time.Minute,
+		stop:     make(chan struct{}),
 	}
 	go b.cleanup()
 	return b
+}
+
+func (b *bruteForceLimiter) Stop() {
+	b.stopOnce.Do(func() { close(b.stop) })
 }
 
 // key can be "ip:<ip>" or "user:<username>"
@@ -224,15 +233,21 @@ func (b *bruteForceLimiter) reset(key string) {
 
 func (b *bruteForceLimiter) cleanup() {
 	ticker := time.NewTicker(10 * time.Minute)
-	for range ticker.C {
-		b.mu.Lock()
-		now := time.Now()
-		for k, a := range b.attempts {
-			if now.Sub(a.lastAttempt) > 1*time.Hour {
-				delete(b.attempts, k)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			b.mu.Lock()
+			now := time.Now()
+			for k, a := range b.attempts {
+				if now.Sub(a.lastAttempt) > 1*time.Hour {
+					delete(b.attempts, k)
+				}
 			}
+			b.mu.Unlock()
+		case <-b.stop:
+			return
 		}
-		b.mu.Unlock()
 	}
 }
 
@@ -306,6 +321,34 @@ const sessionTimeoutHeader = "X-Session-Timeout"
 // SessionTimeout returns middleware that tracks last activity per user in a persistent store
 // and rejects requests after idleDuration. It should be applied to protected routes.
 func SessionTimeout(idleDuration time.Duration, database *db.DB) echo.MiddlewareFunc {
+	// In-memory cache with periodic DB flush to reduce DB round-trips (fixes C6)
+	var (
+		cacheMu   sync.RWMutex
+		cache     = make(map[string]time.Time)
+		flushOnce sync.Once
+	)
+
+	// Periodic flush to DB every 5 minutes
+	flush := func() {
+		flushOnce.Do(func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			go func() {
+				for range ticker.C {
+					cacheMu.Lock()
+					now := time.Now()
+					for sid, last := range cache {
+						if now.Sub(last) > idleDuration {
+							// Session expired, remove from cache
+							delete(cache, sid)
+						}
+					}
+					cacheMu.Unlock()
+				}
+			}()
+		})
+	}
+	flush()
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Get user ID from auth context
@@ -323,22 +366,44 @@ func SessionTimeout(idleDuration time.Duration, database *db.DB) echo.Middleware
 				sessionID = userID
 			}
 
-			last, err := database.GetSessionLastSeen(sessionID)
-			if err != nil {
-				// DB error — fail secure (allow but log)
-				c.Logger().Warnf("session timeout db error: %v", err)
-				_ = database.UpdateSessionLastSeen(sessionID)
-				return next(c)
+			cacheMu.RLock()
+			last, ok := cache[sessionID]
+			cacheMu.RUnlock()
+
+			if !ok {
+				// Cache miss: load from DB once
+				dbLast, err := database.GetSessionLastSeen(sessionID)
+				if err == nil {
+					cacheMu.Lock()
+					cache[sessionID] = dbLast
+					last = dbLast
+					cacheMu.Unlock()
+				}
 			}
 
 			if !last.IsZero() && now.Sub(last) > idleDuration {
 				return echo.NewHTTPError(http.StatusUnauthorized, "session expired due to inactivity")
 			}
 
-			_ = database.UpdateSessionLastSeen(sessionID)
+			// Update in-memory cache (async DB flush)
+			cacheMu.Lock()
+			cache[sessionID] = now
+			cacheMu.Unlock()
+
+			// Async DB update to avoid blocking request
+			go func() {
+				_ = database.UpdateSessionLastSeen(sessionID)
+			}()
 
 			// Inform client how many seconds remain
 			remaining := int(idleDuration.Seconds())
+			if !last.IsZero() {
+				elapsed := int(now.Sub(last).Seconds())
+				remaining = int(idleDuration.Seconds()) - elapsed
+				if remaining < 0 {
+					remaining = 0
+				}
+			}
 			c.Response().Header().Set(sessionTimeoutHeader, fmt.Sprintf("%d", remaining))
 			return next(c)
 		}
@@ -359,6 +424,8 @@ type ipRateLimiter struct {
 	buckets  map[string]*ipBucket
 	capacity float64
 	refill   float64
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 func newIPRateLimiter(capacity, refillPerMin float64) *ipRateLimiter {
@@ -366,9 +433,14 @@ func newIPRateLimiter(capacity, refillPerMin float64) *ipRateLimiter {
 		buckets:  make(map[string]*ipBucket),
 		capacity: capacity,
 		refill:   refillPerMin / 60.0,
+		stop:     make(chan struct{}),
 	}
 	go rl.cleanup()
 	return rl
+}
+
+func (rl *ipRateLimiter) Stop() {
+	rl.stopOnce.Do(func() { close(rl.stop) })
 }
 
 func (rl *ipRateLimiter) allow(ip string) bool {
@@ -403,21 +475,44 @@ func (rl *ipRateLimiter) allow(ip string) bool {
 
 func (rl *ipRateLimiter) cleanup() {
 	ticker := time.NewTicker(5 * time.Minute)
-	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		for ip, b := range rl.buckets {
-			if now.Sub(b.lastSeen) > 10*time.Minute {
-				delete(rl.buckets, ip)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			rl.mu.Lock()
+			now := time.Now()
+			for ip, b := range rl.buckets {
+				if now.Sub(b.lastSeen) > 10*time.Minute {
+					delete(rl.buckets, ip)
+				}
 			}
+			rl.mu.Unlock()
+		case <-rl.stop:
+			return
 		}
-		rl.mu.Unlock()
 	}
+}
+
+// globalRateLimiters is a shared pool of limiters keyed by capacity (fixes C5)
+var (
+	globalRateLimiterPoolMu sync.Mutex
+	globalRateLimiterPool   = make(map[int]*ipRateLimiter)
+)
+
+func getGlobalRateLimiter(requestsPerMin int) *ipRateLimiter {
+	globalRateLimiterPoolMu.Lock()
+	defer globalRateLimiterPoolMu.Unlock()
+	if rl, ok := globalRateLimiterPool[requestsPerMin]; ok {
+		return rl
+	}
+	rl := newIPRateLimiter(float64(requestsPerMin), float64(requestsPerMin))
+	globalRateLimiterPool[requestsPerMin] = rl
+	return rl
 }
 
 // RateLimitByIP returns middleware that rate-limits by IP with configurable limits
 func RateLimitByIP(requestsPerMin int) echo.MiddlewareFunc {
-	limiter := newIPRateLimiter(float64(requestsPerMin), float64(requestsPerMin))
+	limiter := getGlobalRateLimiter(requestsPerMin)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			ip := getTrustedIP(c)

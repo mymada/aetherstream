@@ -48,16 +48,19 @@ type Service struct {
 	stateMu   sync.RWMutex
 	providers map[string]*oauth2.Config
 	stopClean chan struct{}        // signals cleanup goroutine
+	stopOnce  sync.Once            // guards close(stopClean)
+	httpClient *http.Client        // bounded-timeout HTTP client
 }
 
 // NewService creates OAuth service with provider configs
 func NewService(cfg Config) *Service {
 	s := &Service{
-		cfg:       cfg,
-		logger:    zerolog.New(nil),
-		states:    make(map[string]time.Time),
-		providers: make(map[string]*oauth2.Config),
-		stopClean: make(chan struct{}),
+		cfg:        cfg,
+		logger:     zerolog.New(nil),
+		states:     make(map[string]time.Time),
+		providers:  make(map[string]*oauth2.Config),
+		stopClean:  make(chan struct{}),
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 
 	// Start periodic cleanup of expired OAuth states
@@ -140,6 +143,9 @@ func (s *Service) Exchange(ctx context.Context, provider, code string) (*UserInf
 		return nil, fmt.Errorf("provider %s not enabled", provider)
 	}
 
+	// Use bounded-timeout HTTP client for token exchange
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, s.httpClient)
+
 	token, err := p.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("exchange code: %w", err)
@@ -199,10 +205,10 @@ func (s *Service) fetchGitHubUser(ctx context.Context, client *http.Client) (*Us
 	}
 
 	var data struct {
-		ID    int    `json:"id"`
-		Login string `json:"login"`
-		Name  string `json:"name"`
-		Email string `json:"email"`
+		ID     int    `json:"id"`
+		Login  string `json:"login"`
+		Name   string `json:"name"`
+		Email  string `json:"email"`
 		Avatar string `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
@@ -305,7 +311,7 @@ func (s *Service) purgeExpiredStates() {
 	s.stateMu.Unlock()
 }
 
-// Stop halts the background cleanup goroutine
+// Stop halts the background cleanup goroutine (safe for repeated calls)
 func (s *Service) Stop() {
-	close(s.stopClean)
+	s.stopOnce.Do(func() { close(s.stopClean) })
 }

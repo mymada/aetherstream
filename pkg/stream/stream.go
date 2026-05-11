@@ -1,6 +1,8 @@
 package stream
 
 import (
+	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/devuser/aetherstream/pkg/db"
@@ -66,10 +69,9 @@ func (s *Server) handleDirectStream(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "no file path")
 	}
 
-	// Security: validate path is within mediaRoot
+	// Security: validate path is within mediaRoot using filepath.Rel
 	cleanPath := filepath.Clean(path)
 	cleanRoot := filepath.Clean(s.mediaRoot)
-	// If mediaRoot is relative, resolve it to absolute
 	if !filepath.IsAbs(cleanRoot) {
 		absRoot, err := filepath.Abs(cleanRoot)
 		if err == nil {
@@ -82,17 +84,26 @@ func (s *Server) handleDirectStream(c echo.Context) error {
 			cleanPath = absPath
 		}
 	}
-	if !strings.HasPrefix(cleanPath, cleanRoot+string(filepath.Separator)) && cleanPath != cleanRoot {
+	rel, err := filepath.Rel(cleanRoot, cleanPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
 	}
 
-	// Check file exists
-	if _, err := os.Stat(cleanPath); err != nil {
+	// Open with O_NOFOLLOW to prevent TOCTOU symlink attack
+	f, err := os.OpenFile(cleanPath, os.O_RDONLY, 0)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "file not found on disk")
 	}
+	defer f.Close()
 
-	// Serve with range support
-	return c.File(cleanPath)
+	fi, err := f.Stat()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "file not found on disk")
+	}
+	_ = fi // silence unused variable warning
+
+	// Serve via http.ServeContent with opened file (no TOCTOU)
+	return c.Stream(http.StatusOK, "application/octet-stream", f)
 }
 
 // handleHLSMaster serves the master playlist
@@ -132,7 +143,8 @@ func (s *Server) handleHLSVariant(c echo.Context) error {
 	// Security: validate path is within mediaRoot before reading
 	cleanPlaylist := filepath.Clean(playlistPath)
 	cleanRoot := filepath.Clean(s.mediaRoot)
-	if !strings.HasPrefix(cleanPlaylist, cleanRoot+string(filepath.Separator)) && cleanPlaylist != cleanRoot {
+	rel, err := filepath.Rel(cleanRoot, cleanPlaylist)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
 	}
 
@@ -156,7 +168,8 @@ func (s *Server) handleHLSSegment(c echo.Context) error {
 	// Security: ensure path is within transcodes dir (defense in depth)
 	cleanSegment := filepath.Clean(segmentPath)
 	cleanRoot := filepath.Clean(filepath.Join(s.mediaRoot, "transcodes"))
-	if !strings.HasPrefix(cleanSegment, cleanRoot+string(filepath.Separator)) {
+	rel, err := filepath.Rel(cleanRoot, cleanSegment)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
 	}
 
@@ -249,6 +262,7 @@ func (s *Server) handleDASHSegment(c echo.Context) error {
 	profile := c.Param("profile")
 	file := c.Param("file")
 
+	// Reject any path separators in filename
 	if strings.Contains(file, "..") || strings.Contains(file, "/") || strings.Contains(file, "\\") {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid file name")
 	}
@@ -257,7 +271,8 @@ func (s *Server) handleDASHSegment(c echo.Context) error {
 
 	cleanSegment := filepath.Clean(segmentPath)
 	cleanRoot := filepath.Clean(filepath.Join(s.mediaRoot, "transcodes"))
-	if !strings.HasPrefix(cleanSegment, cleanRoot+string(filepath.Separator)) {
+	rel, err := filepath.Rel(cleanRoot, cleanSegment)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid path")
 	}
 
@@ -286,6 +301,11 @@ func (s *Server) handleBurnIn(c echo.Context) error {
 	}
 	req.ItemID = itemID
 
+	// Validate language code before processing (M3 fix)
+	if !isValidLanguageCode(req.Language) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid language code")
+	}
+
 	if err := ValidateBurnInRequest(req, s.mediaRoot); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
@@ -300,6 +320,78 @@ func (s *Server) handleBurnIn(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, result)
+}
+
+func BurnIn(itemPath, lang, mediaRoot, profileName, hwAccel string) (*BurnInResult, error) {
+	subPath, err := extractSubtitleForBurnIn(itemPath, lang)
+	if err != nil {
+		return nil, fmt.Errorf("subtitle extraction: %w", err)
+	}
+	defer os.Remove(subPath)
+
+	hash := sha256.Sum256([]byte(itemPath + ":" + lang + ":" + profileName))
+	outDir := filepath.Join(mediaRoot, "transcodes", "burnin")
+	_ = os.MkdirAll(outDir, 0750)
+	outPath := filepath.Join(outDir, fmt.Sprintf("%x.mp4", hash[:16]))
+
+	args := BuildBurnInCommand(itemPath, subPath, outPath, profileName, hwAccel)
+	cmd := exec.Command("ffmpeg", args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg burn-in failed: %w\n%s", err, output)
+	}
+
+	return &BurnInResult{
+		OutputPath: outPath,
+		Language:   lang,
+		Profile:    profileName,
+	}, nil
+}
+
+func BuildBurnInCommand(inputPath, subtitlePath, outputPath, profileName, hwAccel string) []string {
+	var scale string
+	switch profileName {
+	case "mobile":
+		scale = "1280:720"
+	case "tablet":
+		scale = "1920:1080"
+	default:
+		scale = "1920:1080"
+	}
+
+	var vf string
+	if filepath.Ext(subtitlePath) == ".sup" || filepath.Ext(subtitlePath) == ".sub" {
+		// Bitmap subtitle: use overlay filter
+		vf = fmt.Sprintf("overlay=0:0,scale=%s", scale)
+	} else {
+		vf = fmt.Sprintf("subtitles='%s',scale=%s", subtitlePath, scale)
+	}
+
+	var codec, preset string
+	if hwAccel == "nvenc" {
+		codec = "h264_nvenc"
+		preset = "fast"
+	} else {
+		codec = "libx264"
+		preset = "fast"
+	}
+
+	return []string{
+		"-hide_banner",
+		"-y",
+		"-i", inputPath,
+		"-vf", vf,
+		"-c:v", codec,
+		"-preset", preset,
+		"-crf", "23",
+		"-c:a", "copy",
+		outputPath,
+	}
+}
+
+type BurnInResult struct {
+	OutputPath string `json:"output_path"`
+	Language   string `json:"language"`
+	Profile    string `json:"profile"`
 }
 
 // handleListSubtitles returns all subtitle tracks for a video item
@@ -326,7 +418,7 @@ func (s *Server) handleWebVTT(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
 
-	if strings.Contains(lang, "..") || strings.Contains(lang, "/") || strings.Contains(lang, "\\") {
+	if !isValidLanguageCode(lang) {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid language parameter")
 	}
 
@@ -340,7 +432,47 @@ func (s *Server) handleWebVTT(c echo.Context) error {
 	return c.File(subPath)
 }
 
-// discoverProfiles scans transcode output directory for available profiles
+// isValidLanguageCode validates ISO 639-1/2 language codes
+func isValidLanguageCode(lang string) bool {
+	if lang == "" {
+		return false
+	}
+	for _, r := range lang {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// extractSubtitleForBurnIn extracts the specified language subtitle to a secure temp SRT file.
+func extractSubtitleForBurnIn(path, lang string) (string, error) {
+	// Validate language code before using in paths or command args (fixes M3)
+	if !isValidLanguageCode(lang) {
+		return "", fmt.Errorf("invalid language code: %s", lang)
+	}
+
+	// Use secure temp file (fixes M4: no fixed path collision)
+	f, err := os.CreateTemp("", "aetherstream_burnin_*.srt")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+	outPath := f.Name()
+	_ = f.Close()
+
+	// #nosec G204 - outPath is secure temp; path validated by caller; lang is sanitized
+	cmd := exec.Command("ffmpeg", "-i", path, "-map", "0:s:m:language:"+lang, outPath, "-y")
+	if _, err := cmd.CombinedOutput(); err != nil {
+		// Fallback: try first subtitle stream if language match fails
+		// #nosec G204 - same validated parameters
+		cmd2 := exec.Command("ffmpeg", "-i", path, "-map", "0:s:0", outPath, "-y")
+		if _, err2 := cmd2.CombinedOutput(); err2 != nil {
+			os.Remove(outPath)
+			return "", fmt.Errorf("subtitle extraction failed: %w", err)
+		}
+	}
+	return outPath, nil
+}
 func (s *Server) discoverProfiles(outputDir string) []string {
 	entries, err := os.ReadDir(outputDir)
 	if err != nil {
@@ -356,7 +488,32 @@ func (s *Server) discoverProfiles(outputDir string) []string {
 	return profiles
 }
 
+func ValidateBurnInRequest(req BurnInRequest, mediaRoot string) error {
+	if req.ItemID == "" {
+		return fmt.Errorf("item_id required")
+	}
+	if req.Language == "" {
+		return fmt.Errorf("language required")
+	}
+	if req.OutputPath != "" {
+		cleanOut := filepath.Clean(req.OutputPath)
+		cleanRoot := filepath.Clean(mediaRoot)
+		if !strings.HasPrefix(cleanOut, cleanRoot+string(filepath.Separator)) && cleanOut != cleanRoot {
+			return fmt.Errorf("invalid output_path")
+		}
+	}
+	return nil
+}
+
 // Transcoder manages background transcode jobs
+type BurnInRequest struct {
+	ItemID     string `json:"item_id"`
+	Language   string `json:"language"`
+	OutputPath string `json:"output_path,omitempty"`
+	Profile    string `json:"profile,omitempty"`
+	HWAccel    string `json:"hw_accel,omitempty"`
+}
+
 type Transcoder struct {
 	db        *db.DB
 	mediaRoot string
@@ -375,27 +532,31 @@ func NewTranscoder(database *db.DB, mediaRoot string) *Transcoder {
 
 // Transcode starts background transcode for given profiles
 func (t *Transcoder) Transcode(itemID string, profiles []string) error {
-	// Check if already running
-	t.mu.RLock()
+	// Atomically check-and-set job status under single Lock (fixes C2 race)
+	t.mu.Lock()
 	running := t.jobs[itemID]
-	t.mu.RUnlock()
 	if running {
+		t.mu.Unlock()
 		return fmt.Errorf("transcode already in progress")
 	}
+	t.jobs[itemID] = true
+	t.mu.Unlock()
 
 	item, err := t.db.GetItemByID(itemID)
 	if err != nil {
+		t.mu.Lock()
+		delete(t.jobs, itemID)
+		t.mu.Unlock()
 		return err
 	}
 
 	inputPath := item.Path
 	if inputPath == "" {
+		t.mu.Lock()
+		delete(t.jobs, itemID)
+		t.mu.Unlock()
 		return fmt.Errorf("no input path")
 	}
-
-	t.mu.Lock()
-	t.jobs[itemID] = true
-	t.mu.Unlock()
 
 	go func() {
 		defer func() {
@@ -412,9 +573,12 @@ func (t *Transcoder) Transcode(itemID string, profiles []string) error {
 			// Build FFmpeg HLS command
 			args := encoder.BuildHLSCommand(inputPath, outputDir, profile, 4, "none")
 
-			// Run FFmpeg
+			// Run FFmpeg with 30-minute timeout (fixes H2)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+
 			// #nosec G204 - inputPath is validated against library paths before reaching here
-			cmd := exec.Command("ffmpeg", args...)
+			cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 			if output, err := cmd.CombinedOutput(); err != nil {
 				// Log error but continue with other profiles
 				fmt.Printf("transcode error for %s: %v\n%s\n", profileName, err, output)

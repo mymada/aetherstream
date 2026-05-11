@@ -3,6 +3,7 @@ package probe
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 )
@@ -70,12 +71,12 @@ type VideoInfo struct {
 
 // AudioInfo extracted audio properties
 type AudioInfo struct {
-	Codec        string
-	SampleRate   int
-	Channels     int
+	Codec         string
+	SampleRate    int
+	Channels      int
 	ChannelLayout string
-	BitRate      int64
-	Language     string
+	BitRate       int64
+	Language      string
 }
 
 // SubtitleInfo
@@ -198,8 +199,13 @@ func ExtractSubtitleTracks(path string) ([]map[string]interface{}, error) {
 	return tracks, nil
 }
 
-// ExtractSubtitleToFile extracts a subtitle stream to SRT file
+// ExtractSubtitleToFile extracts a subtitle stream to SRT file using secure temp file
 func ExtractSubtitleToFile(path, lang string) (string, error) {
+	// Validate language code
+	if !isValidLanguageCode(lang) {
+		return "", fmt.Errorf("invalid language code: %s", lang)
+	}
+
 	// Find subtitle index for language
 	info, err := Probe(path)
 	if err != nil {
@@ -216,11 +222,32 @@ func ExtractSubtitleToFile(path, lang string) (string, error) {
 		return "", fmt.Errorf("subtitle language %s not found", lang)
 	}
 
-	outPath := "/tmp/aetherstream_sub_" + lang + ".srt"
-	// #nosec G204 - path is validated by caller against library paths; outPath is a fixed tmp prefix
+	// Use secure temp file (fixes M4: no fixed path, no collision, no symlink attack)
+	f, err := os.CreateTemp("", "aetherstream_sub_*.srt")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+	outPath := f.Name()
+	_ = f.Close()
+
+	// #nosec G204 - path is validated by caller against library paths; outPath is secure temp
 	cmd := exec.Command("ffmpeg", "-i", path, "-map", fmt.Sprintf("0:s:%d", subIndex), outPath, "-y")
 	if _, err := cmd.CombinedOutput(); err != nil {
+		os.Remove(outPath)
 		return "", fmt.Errorf("subtitle extraction failed: %w", err)
 	}
 	return outPath, nil
+}
+
+// isValidLanguageCode validates ISO 639-1/2 language codes
+func isValidLanguageCode(lang string) bool {
+	if lang == "" {
+		return false
+	}
+	for _, r := range lang {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-') {
+			return false
+		}
+	}
+	return true
 }

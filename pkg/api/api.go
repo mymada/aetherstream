@@ -50,7 +50,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	// Global security middlewares
 	e.Use(SecurityHeaders())
 	e.Use(SecureCookieMiddleware())
-	e.Use(CSRFProtection())
+	e.Use(CSRFProtection(s.cfg))
 	e.Use(BruteForceProtection())
 	e.Use(CORSMiddleware(s.cfg))
 

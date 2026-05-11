@@ -52,32 +52,21 @@ func (m *MobileServer) handleMobileDashboard(c echo.Context) error {
 	}
 
 	// Return lightweight recent items + continue watching
-	libs, err := m.srv.db.ListLibraries()
+	// Use DB-level LIMIT to avoid loading all items into memory (fixes M6)
+	items, err := m.srv.db.ListItemsWithLimit(20)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 
 	var recent []MobileDashboardItem
-	for _, lib := range libs {
-		items, err := m.srv.db.ListItemsByLibrary(lib.ID)
-		if err != nil {
-			continue
-		}
-		for _, it := range items {
-			recent = append(recent, MobileDashboardItem{
-				ID:           it.ID,
-				Name:         it.Name,
-				MediaType:    it.MediaType,
-				DurationSec:  it.DurationSeconds,
-				ThumbnailURL: "/api/items/" + it.ID + "/thumbnails/poster",
-			})
-			if len(recent) >= 20 {
-				break
-			}
-		}
-		if len(recent) >= 20 {
-			break
-		}
+	for _, it := range items {
+		recent = append(recent, MobileDashboardItem{
+			ID:           it.ID,
+			Name:         it.Name,
+			MediaType:    it.MediaType,
+			DurationSec:  it.DurationSeconds,
+			ThumbnailURL: "/api/items/" + it.ID + "/thumbnails/poster",
+		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
