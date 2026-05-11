@@ -441,6 +441,25 @@ func (d *DB) UpdateSessionBandwidth(sessionID string, bandwidthKbps int) error {
 	return err
 }
 
+// UpdateSessionLastSeen updates the last_seen timestamp for a session
+func (d *DB) UpdateSessionLastSeen(sessionID string) error {
+	_, err := d.Exec(
+		"UPDATE sessions SET last_seen = CURRENT_TIMESTAMP WHERE id = ?",
+		sessionID,
+	)
+	return err
+}
+
+// GetSessionLastSeen returns the last_seen time for a session
+func (d *DB) GetSessionLastSeen(sessionID string) (time.Time, error) {
+	var lastSeen time.Time
+	err := d.QueryRow("SELECT last_seen FROM sessions WHERE id = ?", sessionID).Scan(&lastSeen)
+	if err == sql.ErrNoRows {
+		return time.Time{}, nil
+	}
+	return lastSeen, err
+}
+
 // --- Users (extended) ---
 
 // UpdateUserRole changes user role

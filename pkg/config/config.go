@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
+	"strings"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
@@ -25,11 +25,12 @@ type Config struct {
 
 // ServerConfig HTTP server settings
 type ServerConfig struct {
-	Port        int    `koanf:"port"`
-	Host        string `koanf:"host"`
-	StaticPath  string `koanf:"static_path"`
-	WebUIPath   string `koanf:"web_ui_path"`
-	MediaRoot   string `koanf:"media_root"`
+	Port           int      `koanf:"port"`
+	Host           string   `koanf:"host"`
+	StaticPath     string   `koanf:"static_path"`
+	WebUIPath      string   `koanf:"web_ui_path"`
+	MediaRoot      string   `koanf:"media_root"`
+	AllowedOrigins []string `koanf:"allowed_origins"`
 }
 
 // DatabaseConfig SQLite settings
@@ -106,6 +107,9 @@ func Load(path string) (*Config, error) {
 		cfg.Server.StaticPath = mediaDir
 		cfg.Server.MediaRoot = mediaDir
 	}
+	if origins := os.Getenv("AETHERSTREAM_ALLOWED_ORIGINS"); origins != "" {
+		cfg.Server.AllowedOrigins = strings.Split(origins, ",")
+	}
 	if webUIPath := os.Getenv("AETHERSTREAM_WEB_UI_PATH"); webUIPath != "" {
 		cfg.Server.WebUIPath = webUIPath
 	} else {
@@ -163,7 +167,7 @@ func Defaults() *Config {
 func generateRandomSecret(length int) string {
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
-		return fmt.Sprintf("aetherstream-fallback-%d-%d", os.Getpid(), time.Now().UnixNano())
+		panic(fmt.Sprintf("failed to generate random secret: %v", err))
 	}
 	return hex.EncodeToString(bytes)
 }

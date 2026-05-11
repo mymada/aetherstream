@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -148,7 +149,15 @@ func TestBruteForceProtection(t *testing.T) {
 
 func TestSessionTimeout(t *testing.T) {
 	e := echo.New()
-	e.Use(SessionTimeout(50 * time.Millisecond))
+	// Create an in-memory DB for testing
+	db, err := db.New(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create test db: %v", err)
+	}
+	if err := db.Migrate(); err != nil {
+		t.Fatalf("failed to migrate: %v", err)
+	}
+	e.Use(SessionTimeout(50*time.Millisecond, db))
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "ok")
 	})

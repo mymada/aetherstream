@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/devuser/aetherstream/pkg/auth"
+	"github.com/devuser/aetherstream/pkg/config"
+	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/crypto/acme/autocert"
@@ -303,10 +305,7 @@ const sessionTimeoutHeader = "X-Session-Timeout"
 
 // SessionTimeout returns middleware that tracks last activity per user in a persistent store
 // and rejects requests after idleDuration. It should be applied to protected routes.
-func SessionTimeout(idleDuration time.Duration) echo.MiddlewareFunc {
-	sessions := make(map[string]time.Time)
-	var mu sync.RWMutex
-
+func SessionTimeout(idleDuration time.Duration, database *db.DB) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Get user ID from auth context
@@ -318,17 +317,25 @@ func SessionTimeout(idleDuration time.Duration) echo.MiddlewareFunc {
 			userID := claims.UserID
 			now := time.Now()
 
-			mu.RLock()
-			last, ok := sessions[userID]
-			mu.RUnlock()
+			// Use session ID from cookie/header if available, otherwise use userID
+			sessionID := c.Request().Header.Get("X-Session-ID")
+			if sessionID == "" {
+				sessionID = userID
+			}
 
-			if ok && now.Sub(last) > idleDuration {
+			last, err := database.GetSessionLastSeen(sessionID)
+			if err != nil {
+				// DB error — fail secure (allow but log)
+				c.Logger().Warnf("session timeout db error: %v", err)
+				_ = database.UpdateSessionLastSeen(sessionID)
+				return next(c)
+			}
+
+			if !last.IsZero() && now.Sub(last) > idleDuration {
 				return echo.NewHTTPError(http.StatusUnauthorized, "session expired due to inactivity")
 			}
 
-			mu.Lock()
-			sessions[userID] = now
-			mu.Unlock()
+			_ = database.UpdateSessionLastSeen(sessionID)
 
 			// Inform client how many seconds remain
 			remaining := int(idleDuration.Seconds())
@@ -488,9 +495,14 @@ func isPrivateIP(ip string) bool {
 // --- CORS ---
 
 // CORSMiddleware returns Echo CORS middleware configured for AetherStream Web UI
-func CORSMiddleware() echo.MiddlewareFunc {
+// If cfg.AllowedOrigins is empty, defaults to same-origin only (no wildcard).
+func CORSMiddleware(cfg *config.Config) echo.MiddlewareFunc {
+	origins := cfg.Server.AllowedOrigins
+	if len(origins) == 0 {
+		origins = []string{"http://localhost:8080", "http://localhost:8081"}
+	}
 	return middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"*"},
+		AllowOrigins:     origins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch},
 		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestedWith, csrfTokenHeader},
 		ExposeHeaders:    []string{echo.HeaderContentLength, echo.HeaderContentType, csrfTokenHeader},

@@ -52,7 +52,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.Use(SecureCookieMiddleware())
 	e.Use(CSRFProtection())
 	e.Use(BruteForceProtection())
-	e.Use(CORSMiddleware())
+	e.Use(CORSMiddleware(s.cfg))
 
 	// Health / system
 	e.GET("/system/info", s.handleSystemInfo, RateLimitByIP(1000))
@@ -66,7 +66,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	// Protected routes
 	api := e.Group("/api")
 	api.Use(s.auth.Middleware())
-	api.Use(SessionTimeout(30 * time.Minute))
+	api.Use(SessionTimeout(30*time.Minute, s.db))
 
 	// Users
 	api.GET("/users", s.handleListUsers)

@@ -23,7 +23,7 @@ func NewMobileServer(srv *Server) *MobileServer {
 func (m *MobileServer) RegisterRoutes(e *echo.Echo) {
 	mobile := e.Group("/api/mobile")
 	mobile.Use(m.srv.auth.Middleware())
-	mobile.Use(SessionTimeout(30 * time.Minute))
+	mobile.Use(SessionTimeout(30*time.Minute, m.srv.db))
 
 	mobile.GET("/dashboard", m.handleMobileDashboard)
 	mobile.GET("/continue-watching", m.handleContinueWatching)

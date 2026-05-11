@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -105,20 +107,32 @@ func (s *Server) handleListSubtitles(c echo.Context) error {
 func (s *Server) handleGetSubtitle(c echo.Context) error {
 	itemID := c.Param("id")
 	lang := c.Param("lang")
+
+	// Validate itemID (UUID or alphanumeric, no path traversal)
+	if !isValidItemID(itemID) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid item id")
+	}
+
+	// Validate lang with strict whitelist: ISO 639-1/2 codes optionally with region
+	if !isValidLanguageCode(lang) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid language parameter")
+	}
+
 	item, err := s.db.GetItemByID(itemID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "item not found")
 	}
-	if strings.Contains(lang, "..") || strings.Contains(lang, "/") || strings.Contains(lang, "\\") {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid language parameter")
-	}
+
 	subPath, err := probe.ExtractSubtitleToFile(item.Path, lang)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "subtitle not found")
 	}
-	if !strings.HasPrefix(subPath, os.TempDir()) && !strings.HasPrefix(subPath, "./thumbnails") {
+
+	// Ensure subtitle path is within allowed directories (temp or thumbnails)
+	if !isPathWithinAllowedDirs(subPath, []string{os.TempDir(), "./thumbnails"}) {
 		return echo.NewHTTPError(http.StatusInternalServerError, "invalid subtitle path")
 	}
+
 	return c.File(subPath)
 }
 
@@ -314,6 +328,39 @@ func (s *Server) handleMarkWatched(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+func isValidItemID(id string) bool {
+	// Accept UUIDs or URL-safe base64 / alphanumeric IDs
+	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, id)
+	return matched
+}
+
+func isValidLanguageCode(lang string) bool {
+	// ISO 639-1 (2 letters) or ISO 639-2 (3 letters), optionally with region subtag
+	matched, _ := regexp.MatchString(`^[a-zA-Z]{2,3}(-[a-zA-Z]{2})?$`, lang)
+	return matched
+}
+
+func isPathWithinAllowedDirs(path string, allowedDirs []string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	for _, dir := range allowedDirs {
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(absDir, absPath)
+		if err != nil {
+			continue
+		}
+		if !strings.HasPrefix(rel, "..") && rel != ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handlePlaybackReporting(c echo.Context) error {
