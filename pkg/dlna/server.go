@@ -62,6 +62,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/device/description.xml", s.handleDeviceDescription)
 	mux.HandleFunc("/ContentDirectory/control", s.handleContentDirectory)
 	mux.HandleFunc("/ConnectionManager/control", s.handleConnectionManager)
+	mux.HandleFunc("/AVTransport/control", s.handleAVTransport)
 	mux.HandleFunc("/content/", s.handleContentDelivery)
 
 	s.httpServer = &http.Server{
@@ -303,6 +304,13 @@ func (s *Server) buildDeviceDescription() string {
         <controlURL>/ConnectionManager/control</controlURL>
         <eventSubURL>/ConnectionManager/event</eventSubURL>
         <SCPDURL>/ConnectionManager/scpd.xml</SCPDURL>
+      </service>
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:AVTransport</serviceId>
+        <controlURL>/AVTransport/control</controlURL>
+        <eventSubURL>/AVTransport/event</eventSubURL>
+        <SCPDURL>/AVTransport/scpd.xml</SCPDURL>
       </service>
     </serviceList>
   </device>

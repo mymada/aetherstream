@@ -303,11 +303,13 @@ func TestBuildDeviceDescriptionXML(t *testing.T) {
 	assert.Equal(t, "AetherStream", root.Device.Manufacturer)
 	assert.Equal(t, "AetherStream", root.Device.ModelName)
 	assert.NotEmpty(t, root.Device.UDN)
-	require.Len(t, root.Device.ServiceList.Service, 2)
+	require.Len(t, root.Device.ServiceList.Service, 3)
 	assert.Equal(t, "urn:schemas-upnp-org:service:ContentDirectory:1", root.Device.ServiceList.Service[0].ServiceType)
 	assert.Equal(t, "/ContentDirectory/control", root.Device.ServiceList.Service[0].ControlURL)
 	assert.Equal(t, "urn:schemas-upnp-org:service:ConnectionManager:1", root.Device.ServiceList.Service[1].ServiceType)
 	assert.Equal(t, "/ConnectionManager/control", root.Device.ServiceList.Service[1].ControlURL)
+	assert.Equal(t, "urn:schemas-upnp-org:service:AVTransport:1", root.Device.ServiceList.Service[2].ServiceType)
+	assert.Equal(t, "/AVTransport/control", root.Device.ServiceList.Service[2].ControlURL)
 }
 
 func TestFormatDuration(t *testing.T) {

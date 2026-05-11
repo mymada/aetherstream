@@ -1,0 +1,200 @@
+/* TV Mode Styles — optimized for large screens and remote/keyboard navigation */
+
+.tv-page {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  color: #fff;
+  font-size: 24px;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.tv-page * {
+  box-sizing: border-box;
+}
+
+.tv-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 40px;
+  text-align: center;
+}
+
+.tv-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.tv-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.2s ease;
+}
+
+.tv-qr-placeholder {
+  width: 240px;
+  height: 240px;
+  background: #fff;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-size: 18px;
+  padding: 12px;
+}
+
+.tv-status {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.tv-status.waiting {
+  color: #fbbf24;
+}
+
+.tv-status.paired {
+  color: #34d399;
+}
+
+.tv-status.playing {
+  color: #60a5fa;
+}
+
+.tv-player-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: #000;
+}
+
+.tv-player-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tv-info-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 40px 60px;
+  background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 40%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.tv-info-overlay.active {
+  opacity: 1;
+}
+
+.tv-info-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.tv-info-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 24px;
+}
+
+.tv-progress-bar {
+  flex: 1;
+  height: 12px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tv-progress-fill {
+  height: 100%;
+  background: #60a5fa;
+  border-radius: 6px;
+  transition: width 0.2s linear;
+}
+
+.tv-progress-fill.seeking {
+  background: #fbbf24;
+}
+
+.tv-remote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  padding: 24px;
+}
+
+.tv-btn {
+  min-width: 80px;
+  min-height: 80px;
+  font-size: 24px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tv-btn:focus-visible,
+.tv-btn:focus {
+  outline: 4px solid #60a5fa;
+  outline-offset: 4px;
+  border-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.2);
+}
+
+.tv-btn:active {
+  background: rgba(255,255,255,0.25);
+}
+
+.tv-btn.primary {
+  background: rgba(96, 165, 250, 0.25);
+  border-color: #60a5fa;
+}
+
+.tv-debug-panel {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(0,0,0,0.7);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.tv-debug-toggle {
+  min-width: 80px;
+  min-height: 80px;
+}

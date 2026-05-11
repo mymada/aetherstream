@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Hls from 'hls.js'
-import { getItem, getStreamUrl } from '../api.ts'
+import { getItem, getStreamUrl, getThumbnailUrl } from '../api.ts'
+import ChromecastButton from '../components/ChromecastButton.tsx'
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -272,6 +273,14 @@ export default function MediaPlayer() {
             <button style={styles.ctrlBtn} onClick={toggleFullscreen} title="Fullscreen">
               FS
             </button>
+            {id && (
+              <ChromecastButton
+                mediaUrl={getStreamUrl(id)}
+                title={item?.title}
+                thumbnail={item?.thumbnail ? getThumbnailUrl(item.thumbnail) : undefined}
+                style={{ marginLeft: '8px' }}
+              />
+            )}
           </div>
         )}
       </div>

@@ -6,6 +6,7 @@ import LibraryBrowser from './components/LibraryBrowser.tsx'
 import MediaPlayer from './components/MediaPlayer.tsx'
 import Settings from './components/Settings.tsx'
 import Layout from './components/Layout.tsx'
+import TVPage from './pages/TV/TVPage.tsx'
 
 function App() {
   const { token } = useAuth()
@@ -27,6 +28,7 @@ function App() {
         <Route path="/libraries/:libraryId" element={<LibraryBrowser />} />
         <Route path="/player/:id" element={<MediaPlayer />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/tv" element={<TVPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
