@@ -129,7 +129,7 @@ func TestProfileCommandVAAPI(t *testing.T) {
 
 func TestBuildHLSCommand(t *testing.T) {
 	p := ProfileTablet
-	args := BuildHLSCommand("/input.mkv", "/hls/out", p, 6, "none")
+	args := BuildHLSCommand("/input.mkv", "/hls/out", p, 6, "none", 0)
 
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "-f hls") {
@@ -151,7 +151,7 @@ func TestBuildHLSCommand(t *testing.T) {
 
 func TestBuildHLSCommandNVENC(t *testing.T) {
 	p := ProfileTV
-	args := BuildHLSCommand("/input.mkv", "/hls/out", p, 4, "nvenc")
+	args := BuildHLSCommand("/input.mkv", "/hls/out", p, 4, "nvenc", 0)
 
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "hevc_nvenc") {

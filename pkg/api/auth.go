@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/devuser/aetherstream/pkg/auth"
+	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -104,6 +105,9 @@ func (s *Server) handleListUsers(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
 	}
+	if users == nil {
+		users = []db.User{}
+	}
 	return c.JSON(http.StatusOK, users)
 }
 
@@ -126,6 +130,14 @@ func (s *Server) handleRegister(c echo.Context) error {
 	}
 	if req.Username == "" || req.Password == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "username and password required")
+	}
+	if len(req.Password) < 8 {
+		return echo.NewHTTPError(http.StatusBadRequest, "password must be at least 8 characters")
+	}
+	// Check if username already exists
+	_, _, _, err := s.db.GetUserByUsername(req.Username)
+	if err == nil {
+		return echo.NewHTTPError(http.StatusConflict, "username already exists")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {

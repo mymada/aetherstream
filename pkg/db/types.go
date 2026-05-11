@@ -15,25 +15,26 @@ type Library struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Path      string    `json:"path"`
-	MediaType string    `json:"mediaType"`
+	MediaType string    `json:"type"`
+	ItemCount int       `json:"item_count"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 // Item represents a media item.
 type Item struct {
-	ID               string    `json:"id"`
-	LibraryID        string    `json:"libraryId"`
-	Path             string    `json:"path"`
-	Name             string    `json:"name"`
-	MediaType        string    `json:"mediaType"`
-	Container        string    `json:"container"`
-	SizeBytes        int64     `json:"sizeBytes"`
-	DurationSeconds  float64   `json:"durationSeconds"`
-	Width            int       `json:"width"`
-	Height           int       `json:"height"`
-	VideoCodec       string    `json:"videoCodec"`
-	AudioCodec       string    `json:"audioCodec"`
-	CreatedAt        time.Time `json:"createdAt"`
+	ID              string    `json:"id"`
+	LibraryID       string    `json:"library_id"`
+	Path            string    `json:"path"`
+	Name            string    `json:"title"`
+	MediaType       string    `json:"type"`
+	Container       string    `json:"container"`
+	SizeBytes       int64     `json:"sizeBytes"`
+	DurationSeconds float64   `json:"duration"`
+	Width           int       `json:"width"`
+	Height          int       `json:"height"`
+	VideoCodec      string    `json:"videoCodec"`
+	AudioCodec      string    `json:"audioCodec"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 
 // Collection represents a user collection/playlist.

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,6 +48,10 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to run migrations")
 	}
 
+	if err := database.SeedAdminUser(); err != nil {
+		log.Fatal().Err(err).Msg("failed to seed admin user")
+	}
+
 	// Auth
 	authSvc, err := auth.NewService(cfg.Auth.Secret, cfg.Auth.TokenTTL)
 	if err != nil {
@@ -68,14 +73,26 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(api.SecurityHeaders())
+	// CORS: explicit origins only, no wildcard with credentials
+	allowedOrigins := []string{"http://localhost:3000", "http://localhost:8081", "http://127.0.0.1:8081", "http://192.168.1.50:8081"}
+	if len(cfg.Server.AllowedOrigins) > 0 {
+		allowedOrigins = cfg.Server.AllowedOrigins
+	}
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"*"},
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, echo.HeaderXRequestedWith},
 		AllowCredentials: true,
 		MaxAge:           86400,
 	}))
-	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
+	e.Use(middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Skipper: func(c echo.Context) bool {
+			// Skip rate limiting for HLS/DASH/direct streaming endpoints —
+			// Hls.js makes many rapid sequential segment requests and must not be throttled.
+			return strings.HasPrefix(c.Request().URL.Path, "/videos/")
+		},
+		Store: middleware.NewRateLimiterMemoryStore(20),
+	}))
 
 	// Metrics + pprof
 	m := metrics.NewMetrics()
@@ -116,24 +133,6 @@ func main() {
 	// Swagger docs
 	docs.RegisterRoutes(e)
 
-	// Serve Web UI static files on /app — MUST be after API routes
-	webUIPath := cfg.Server.WebUIPath
-	if webUIPath == "" {
-		webUIPath = "web/dist"
-	}
-	e.Static("/app/assets", webUIPath+"/assets")
-	e.File("/app", webUIPath+"/index.html")
-	e.GET("/app/*", func(c echo.Context) error {
-		return c.File(webUIPath + "/index.html")
-	})
-
-	// TV mode — same SPA, React Router handles /tv
-	e.GET("/tv", func(c echo.Context) error {
-		return c.File(webUIPath + "/index.html")
-	})
-	e.GET("/tv/*", func(c echo.Context) error {
-		return c.File(webUIPath + "/index.html")
-	})
 
 	// DLNA/UPnP server
 	dlnaServer := dlna.NewServer(database, cfg.Server.Host, cfg.Server.Port+1, "AetherStream")

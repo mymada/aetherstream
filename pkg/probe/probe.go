@@ -25,6 +25,12 @@ type Format struct {
 	Tags           map[string]string `json:"tags"`
 }
 
+// Disposition holds ffprobe stream disposition flags
+type Disposition struct {
+	Default int `json:"default"`
+	Forced  int `json:"forced"`
+}
+
 // Stream represents a media stream (video/audio/subtitle)
 type Stream struct {
 	Index          int    `json:"index"`
@@ -43,6 +49,7 @@ type Stream struct {
 	Duration       string `json:"duration,omitempty"`
 	Language       string `json:"language,omitempty"`
 	Tags           map[string]string `json:"tags"`
+	Disposition    Disposition       `json:"disposition"`
 }
 
 // MediaInfo is the processed result
@@ -52,7 +59,8 @@ type MediaInfo struct {
 	Size        int64
 	Format      string
 	Video       *VideoInfo
-	Audio       *AudioInfo
+	Audio       *AudioInfo   // first/default audio stream (backward compat)
+	AllAudio    []AudioInfo  // all audio streams
 	Subtitles   []SubtitleInfo
 	ProbeScore  int
 }
@@ -71,18 +79,27 @@ type VideoInfo struct {
 
 // AudioInfo extracted audio properties
 type AudioInfo struct {
+	StreamIndex   int
+	SubIndex      int    // index within audio streams (for -map 0:a:N)
 	Codec         string
 	SampleRate    int
 	Channels      int
 	ChannelLayout string
 	BitRate       int64
 	Language      string
+	Title         string
+	Default       bool
 }
 
-// SubtitleInfo
+// SubtitleInfo describes a single subtitle stream
 type SubtitleInfo struct {
-	Codec    string
-	Language string
+	StreamIndex int
+	SubIndex    int    // index within subtitle streams (for -map 0:s:N)
+	Codec       string
+	Language    string
+	Title       string
+	Forced      bool
+	Default     bool
 }
 
 // Probe runs ffprobe on a media file
@@ -127,18 +144,35 @@ func parseResult(r *FFProbeResult) *MediaInfo {
 		info.Size = sz
 	}
 
-	// Parse streams
+	// Parse streams — track per-type counters for -map 0:a:N / 0:s:N indexing
+	audioIdx := 0
+	subIdx := 0
 	for _, s := range r.Streams {
 		switch s.CodecType {
 		case "video":
 			info.Video = parseVideoStream(&s)
 		case "audio":
-			info.Audio = parseAudioStream(&s)
+			a := parseAudioStream(&s)
+			a.StreamIndex = s.Index
+			a.SubIndex = audioIdx
+			a.Title = s.Tags["title"]
+			a.Default = s.Disposition.Default == 1
+			info.AllAudio = append(info.AllAudio, *a)
+			if info.Audio == nil {
+				info.Audio = a
+			}
+			audioIdx++
 		case "subtitle":
 			info.Subtitles = append(info.Subtitles, SubtitleInfo{
-				Codec:    s.CodecName,
-				Language: s.Tags["language"],
+				StreamIndex: s.Index,
+				SubIndex:    subIdx,
+				Codec:       s.CodecName,
+				Language:    s.Tags["language"],
+				Title:       s.Tags["title"],
+				Forced:      s.Disposition.Forced == 1,
+				Default:     s.Disposition.Default == 1,
 			})
+			subIdx++
 		}
 	}
 
@@ -182,18 +216,44 @@ func parseAudioStream(s *Stream) *AudioInfo {
 	return a
 }
 
-// ExtractSubtitleTracks returns subtitle streams from a media file
+// ExtractSubtitleByIndex extracts a subtitle stream by its subtitle-relative index (0:s:N).
+func ExtractSubtitleByIndex(path string, subIndex int) (string, error) {
+	if subIndex < 0 || subIndex > 99 {
+		return "", fmt.Errorf("invalid subtitle index: %d", subIndex)
+	}
+
+	f, err := os.CreateTemp("", "aetherstream_sub_*.srt")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+	outPath := f.Name()
+	_ = f.Close()
+
+	// #nosec G204 - path validated by caller; outPath is a secure temp file
+	cmd := exec.Command("ffmpeg", "-i", path, "-map", fmt.Sprintf("0:s:%d", subIndex), outPath, "-y")
+	if _, err := cmd.CombinedOutput(); err != nil {
+		os.Remove(outPath)
+		return "", fmt.Errorf("subtitle extraction failed: %w", err)
+	}
+	return outPath, nil
+}
+
+// ExtractSubtitleTracks returns all subtitle streams from a media file with full metadata.
 func ExtractSubtitleTracks(path string) ([]map[string]interface{}, error) {
 	info, err := Probe(path)
 	if err != nil {
 		return nil, err
 	}
 	var tracks []map[string]interface{}
-	for i, sub := range info.Subtitles {
+	for _, sub := range info.Subtitles {
 		tracks = append(tracks, map[string]interface{}{
-			"index":    i,
-			"codec":    sub.Codec,
-			"language": sub.Language,
+			"sub_index":    sub.SubIndex,
+			"stream_index": sub.StreamIndex,
+			"codec":        sub.Codec,
+			"language":     sub.Language,
+			"title":        sub.Title,
+			"forced":       sub.Forced,
+			"default":      sub.Default,
 		})
 	}
 	return tracks, nil

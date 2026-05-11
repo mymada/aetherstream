@@ -79,17 +79,23 @@ func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
 func (s *Service) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			var tokenStr string
+
+			// Accept token from Authorization header or ?token= query param (for media src URLs)
 			authHeader := c.Request().Header.Get("Authorization")
-			if authHeader == "" {
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+					return echo.NewHTTPError(401, "invalid authorization header format")
+				}
+				tokenStr = parts[1]
+			} else if q := c.QueryParam("token"); q != "" {
+				tokenStr = q
+			} else {
 				return echo.NewHTTPError(401, "missing authorization header")
 			}
 
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-				return echo.NewHTTPError(401, "invalid authorization header format")
-			}
-
-			claims, err := s.ValidateToken(parts[1])
+			claims, err := s.ValidateToken(tokenStr)
 			if err != nil {
 				return echo.NewHTTPError(401, "invalid token: "+err.Error())
 			}

@@ -39,27 +39,30 @@ func TestHandleProbe(t *testing.T) {
 
 func TestHLSMasterNotFound(t *testing.T) {
 	e := echo.New()
-	
+
 	dbConn, _ := db.New(":memory:")
 	defer dbConn.Close()
 	dbConn.Migrate()
 
-	// Insert item
-	err := dbConn.CreateItem("test-2", "lib-1", "/tmp/nonexistent.mp4", "Test", "video", ".mp4", 0, 0, 0, 0, "", "")
+	// Use a unique item ID to avoid collision with leftover transcode dirs
+	itemID := fmt.Sprintf("hls-test-%d", 999999)
+
+	err := dbConn.CreateItem(itemID, "lib-1", "/tmp/nonexistent.mp4", "Test", "video", ".mp4", 0, 0, 0, 0, "", "")
 	assert.NoError(t, err)
 
-	srv := NewServer(dbConn, "/tmp/media")
+	// Use a temp dir as media root to ensure no pre-existing transcode dirs
+	tmpRoot := t.TempDir()
+	srv := NewServer(dbConn, tmpRoot)
 	srv.RegisterRoutes(e, func(next echo.HandlerFunc) echo.HandlerFunc {
 		return next
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/videos/test-2/hls/master.m3u8", nil)
+	req := httptest.NewRequest(http.MethodGet, "/videos/"+itemID+"/hls/master.m3u8", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
-	// Returns waiting playlist (200) because transcode not started
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Waiting for transcode")
+	// Returns 503 with Retry-After header while transcode is in progress
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 func TestDirectStreamNotFound(t *testing.T) {
@@ -94,16 +97,13 @@ func TestTranscoderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_ = tr.Transcode("item-1", []string{"mobile"})
+			_ = tr.Transcode("item-1", []string{"mobile"}, 0)
 		}()
 	}
 	wg.Wait()
 
 	// Only one job should have been marked running; after completion jobs should be empty
-	tr.mu.RLock()
-	lenJobs := len(tr.jobs)
-	tr.mu.RUnlock()
-	assert.Equal(t, 0, lenJobs)
+	assert.Equal(t, 0, tr.jobMgr.ActiveCount())
 }
 
 func TestTranscoderMultipleItems(t *testing.T) {
@@ -119,13 +119,10 @@ func TestTranscoderMultipleItems(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			itemID := fmt.Sprintf("item-%d", idx)
-			_ = tr.Transcode(itemID, []string{"mobile"})
+			_ = tr.Transcode(itemID, []string{"mobile"}, 0)
 		}(i)
 	}
 	wg.Wait()
 
-	tr.mu.RLock()
-	lenJobs := len(tr.jobs)
-	tr.mu.RUnlock()
-	assert.Equal(t, 0, lenJobs)
+	assert.Equal(t, 0, tr.jobMgr.ActiveCount())
 }

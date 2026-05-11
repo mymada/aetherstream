@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth.ts'
 import LoginPage from './components/LoginPage.tsx'
+import RegisterPage from './components/RegisterPage.tsx'
 import Dashboard from './components/Dashboard.tsx'
 import LibraryBrowser from './components/LibraryBrowser.tsx'
 import MediaPlayer from './components/MediaPlayer.tsx'
@@ -15,6 +16,7 @@ function App() {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )

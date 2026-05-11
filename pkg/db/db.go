@@ -288,7 +288,21 @@ CREATE INDEX IF NOT EXISTS idx_chapters_item ON chapters(item_id);
 
 // --- Users ---
 
-// CreateUser inserts a new user
+// SeedAdminUser creates a default admin user if no users exist
+func (d *DB) SeedAdminUser() error {
+	var count int
+	err := d.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("count users: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+	// Default admin: admin / changeme
+	// Hash generated with bcrypt.DefaultCost
+	hash := "$2b$12$s03x5bD.0wdLVcLO7DR.b.skCRWJujdc.qB8oJ9dYV.iR6xNf0aT."
+	return d.CreateUser("admin-001", "admin", hash, "admin")
+}
 func (d *DB) CreateUser(id, username, passwordHash, role string) error {
 	_, err := d.Exec(
 		"INSERT INTO users(id, username, password_hash, role) VALUES (?, ?, ?, ?)",
@@ -353,9 +367,13 @@ func (d *DB) CreateLibrary(id, name, path, mediaType string) error {
 	return err
 }
 
-// ListLibraries returns all libraries
+// ListLibraries returns all libraries with item counts
 func (d *DB) ListLibraries() ([]Library, error) {
-	rows, err := d.Query("SELECT id, name, path, media_type, created_at FROM libraries")
+	rows, err := d.Query(`
+		SELECT l.id, l.name, l.path, l.media_type, l.created_at, COUNT(i.id)
+		FROM libraries l
+		LEFT JOIN items i ON i.library_id = l.id
+		GROUP BY l.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +382,7 @@ func (d *DB) ListLibraries() ([]Library, error) {
 	var libs []Library
 	for rows.Next() {
 		var l Library
-		if err := rows.Scan(&l.ID, &l.Name, &l.Path, &l.MediaType, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.Name, &l.Path, &l.MediaType, &l.CreatedAt, &l.ItemCount); err != nil {
 			continue
 		}
 		libs = append(libs, l)
@@ -441,6 +459,20 @@ func (d *DB) ListItemsWithLimit(limit int) ([]Item, error) {
 		items = append(items, it)
 	}
 	return items, nil
+}
+
+// CountLibraries returns total number of libraries
+func (d *DB) CountLibraries() (int, error) {
+	var count int
+	err := d.QueryRow("SELECT COUNT(*) FROM libraries").Scan(&count)
+	return count, err
+}
+
+// CountItems returns total number of items
+func (d *DB) CountItems() (int, error) {
+	var count int
+	err := d.QueryRow("SELECT COUNT(*) FROM items").Scan(&count)
+	return count, err
 }
 
 // --- Sessions ---

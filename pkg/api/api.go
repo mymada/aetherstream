@@ -60,6 +60,52 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.GET("/system/info", s.handleSystemInfo, RateLimitByIP(1000))
 	e.GET("/api/system/hardware", s.handleSystemHardware, RateLimitByIP(1000))
 
+	// Static app routes (must be after API routes but before catch-all)
+	webUIPath := s.cfg.Server.WebUIPath
+	if webUIPath == "" {
+		webUIPath = "web/dist"
+	}
+	e.Static("/app/assets", webUIPath+"/assets")
+	e.File("/app", webUIPath+"/index.html")
+	e.File("/vite.svg", webUIPath+"/vite.svg")
+	// SPA catch-all for ALL React Router routes under /app
+	e.GET("/app/*", func(c echo.Context) error {
+		return c.File(webUIPath + "/index.html")
+	})
+
+	// Redirect root to /app
+	e.GET("/", func(c echo.Context) error {
+		return c.Redirect(301, "/app")
+	})
+
+	// TV mode — redirect to /app/tv
+	e.GET("/tv", func(c echo.Context) error {
+		return c.Redirect(301, "/app/tv")
+	})
+	e.GET("/tv/*", func(c echo.Context) error {
+		return c.Redirect(301, "/app/tv/"+c.Param("*"))
+	})
+
+	// Redirect short routes to /app/* (React Router uses basename="/app")
+	e.GET("/login", func(c echo.Context) error {
+		return c.Redirect(301, "/app/login")
+	})
+	e.GET("/register", func(c echo.Context) error {
+		return c.Redirect(301, "/app/register")
+	})
+	e.GET("/libraries", func(c echo.Context) error {
+		return c.Redirect(301, "/app/libraries")
+	})
+	e.GET("/libraries/*", func(c echo.Context) error {
+		return c.Redirect(301, "/app/libraries/"+c.Param("*"))
+	})
+	e.GET("/player/*", func(c echo.Context) error {
+		return c.Redirect(301, "/app/player/"+c.Param("*"))
+	})
+	e.GET("/settings", func(c echo.Context) error {
+		return c.Redirect(301, "/app/settings")
+	})
+
 	// Auth routes (public)
 	e.POST("/auth/login", s.handleLogin, RateLimitByIP(10))
 	e.POST("/auth/register", s.handleRegister, RateLimitByIP(10))

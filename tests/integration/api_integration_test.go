@@ -379,11 +379,11 @@ func TestItems_ListAndGet(t *testing.T) {
 	var item map[string]interface{}
 	h.jsonBody(resp, &item)
 	require.Equal(t, itemID, item["id"])
-	require.Equal(t, "Test Video", item["name"])
+	require.Equal(t, "Test Video", item["title"])
 
-	// Missing library_id
+	// Missing library_id now returns all items (200) instead of 400
 	resp = h.do(http.MethodGet, "/api/items", nil, h.userToken)
-	h.requireStatus(resp, http.StatusBadRequest)
+	h.requireStatus(resp, http.StatusOK)
 
 	// Non-existent item
 	resp = h.do(http.MethodGet, "/api/items/nonexistent", nil, h.userToken)
@@ -739,7 +739,8 @@ func TestIntegration_FullFlow(t *testing.T) {
 
 	// 15. Thumbnails
 	resp = h.do(http.MethodGet, "/api/items/"+itemID+"/thumbnails/poster", nil, adminTok)
-	if resp.StatusCode != http.StatusOK {
+	thumbnailOK := resp.StatusCode == http.StatusOK
+	if !thumbnailOK {
 		t.Logf("thumbnail returned %d (ffmpeg may be missing or failing)", resp.StatusCode)
 	}
 
@@ -756,4 +757,6 @@ func TestIntegration_FullFlow(t *testing.T) {
 	var sys map[string]interface{}
 	h.jsonBody(resp, &sys)
 	require.Equal(t, "AetherStream", sys["name"])
+	// thumbnail may 404 if ffmpeg missing — soft assertion
+	_ = thumbnailOK
 }

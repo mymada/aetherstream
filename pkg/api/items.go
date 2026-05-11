@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/devuser/aetherstream/pkg/auth"
+	"github.com/devuser/aetherstream/pkg/db"
 	"github.com/devuser/aetherstream/pkg/encoder"
 	"github.com/devuser/aetherstream/pkg/probe"
 	"github.com/devuser/aetherstream/pkg/thumbnail"
@@ -18,11 +20,18 @@ import (
 	"github.com/google/uuid"
 )
 
+var startTime = time.Now()
+
 func (s *Server) handleSystemInfo(c echo.Context) error {
+	libCount, _ := s.db.CountLibraries()
+	itemCount, _ := s.db.CountItems()
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"name":    "AetherStream",
-		"version": "1.5.0",
-		"status":  "ok",
+		"name":            "AetherStream",
+		"version":         "1.5.0",
+		"uptime":          time.Since(startTime).String(),
+		"libraries_count": libCount,
+		"items_count":     itemCount,
+		"status":          "ok",
 	})
 }
 
@@ -33,12 +42,18 @@ func (s *Server) handleSystemHardware(c echo.Context) error {
 
 func (s *Server) handleListItems(c echo.Context) error {
 	libID := c.QueryParam("library_id")
+	var items []db.Item
+	var err error
 	if libID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "library_id required")
+		items, err = s.db.ListItemsWithLimit(1000)
+	} else {
+		items, err = s.db.ListItemsByLibrary(libID)
 	}
-	items, err := s.db.ListItemsByLibrary(libID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+	}
+	if items == nil {
+		items = []db.Item{}
 	}
 	return c.JSON(http.StatusOK, items)
 }
@@ -56,6 +71,9 @@ func (s *Server) handleListLibraries(c echo.Context) error {
 	libs, err := s.db.ListLibraries()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+	}
+	if libs == nil {
+		libs = []db.Library{}
 	}
 	return c.JSON(http.StatusOK, libs)
 }

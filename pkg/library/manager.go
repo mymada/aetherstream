@@ -138,13 +138,19 @@ func (m *Manager) processFile(f scanner.MediaFile) error {
 		}
 	}
 
+	// Use scanner media type as fallback when naming parser can't identify the kind
+	kind := parsed.Kind
+	if kind == "unknown" {
+		kind = f.MediaType
+	}
+
 	// Store in database
 	return m.db.CreateItem(
 		itemID,
 		f.LibraryID,
 		f.Path,
 		f.Name,
-		parsed.Kind,
+		kind,
 		f.Ext,
 		f.Size,
 		0, // duration — will be filled by probe

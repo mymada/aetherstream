@@ -111,6 +111,11 @@ func (s *Scanner) ScanLibrary(libraryID, path string) ([]MediaFile, error) {
 			return nil
 		}
 		if d.IsDir() {
+			// Skip internal directories that are not user media
+			name := filepath.Base(p)
+			if name == "transcodes" || name == "cache" || name == "thumbnails" {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 

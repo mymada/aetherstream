@@ -204,8 +204,9 @@ func (p Profile) Command(inputPath, outputPath string, hwAccel string) []string 
 	return args
 }
 
-// BuildHLSCommand creates FFmpeg args for HLS segment generation
-func BuildHLSCommand(inputPath, outputDir string, profile Profile, segmentDuration int, hwAccel string) []string {
+// BuildHLSCommand creates FFmpeg args for HLS segment generation.
+// audioIndex selects which audio stream to include (0:a:N mapping).
+func BuildHLSCommand(inputPath, outputDir string, profile Profile, segmentDuration int, hwAccel string, audioIndex int) []string {
 	playlistPath := filepath.Join(outputDir, "playlist.m3u8")
 	segmentPath := filepath.Join(outputDir, "segment_%03d.ts")
 
@@ -214,6 +215,8 @@ func BuildHLSCommand(inputPath, outputDir string, profile Profile, segmentDurati
 		"-loglevel", "error",
 		"-i", inputPath,
 		"-y",
+		"-map", "0:v:0",
+		"-map", fmt.Sprintf("0:a:%d", audioIndex),
 	}
 
 	// Hardware acceleration for HLS
@@ -280,11 +283,13 @@ func BuildHLSCommand(inputPath, outputDir string, profile Profile, segmentDurati
 		"-ac", "2",
 	)
 
-	// HLS output
+	// event playlist: ffmpeg writes playlist.m3u8 after each segment so clients can
+	// start playback as soon as the first segment is ready, rather than waiting for
+	// the full transcode. #EXT-X-ENDLIST is added when encoding completes.
 	args = append(args,
 		"-f", "hls",
 		"-hls_time", strconv.Itoa(segmentDuration),
-		"-hls_playlist_type", "vod",
+		"-hls_playlist_type", "event",
 		"-hls_segment_filename", segmentPath,
 		"-hls_flags", "independent_segments",
 		playlistPath,
