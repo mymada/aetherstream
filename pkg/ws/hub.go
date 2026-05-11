@@ -1,12 +1,14 @@
 package ws
 
 import (
+	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/devuser/aetherstream/pkg/auth"
 	"github.com/devuser/aetherstream/pkg/db"
+	"github.com/devuser/aetherstream/pkg/playback"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
@@ -177,4 +179,51 @@ func BroadcastToUser(userID string, msg []byte) {
 			}
 		}
 	}
+}
+
+// HandlePlaybackWebSocketHTTP is the HTTP entry point for playback WebSocket.
+// Receivers (TVs) connect without auth. Controllers (phones) must provide a valid token.
+func HandlePlaybackWebSocketHTTP(c echo.Context, authSvc *auth.Service) error {
+	clientType := c.QueryParam("type")
+	if clientType == "" {
+		clientType = string(PlaybackTypeReceiver)
+	}
+
+	var userID string
+	if clientType == string(PlaybackTypeController) {
+		// Controller must be authenticated
+		claims := auth.GetUser(c)
+		if claims == nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+		}
+		userID = claims.UserID
+	} else {
+		// Receiver (TV) — anonymous or generate a temp ID
+		userID = "tv-" + c.QueryParam("device_id")
+		if userID == "tv-" {
+			userID = "tv-anonymous"
+		}
+	}
+
+	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+	if err != nil {
+		log.Warn().Err(err).Msg("playback websocket upgrade failed")
+		return err
+	}
+
+	HandlePlaybackWebSocket(conn, PlaybackClientType(clientType), userID)
+	return nil
+}
+
+// ForwardPlaybackEvent forwards a playback event to the WebSocket hub.
+func ForwardPlaybackEvent(event playback.PlaybackEvent) {
+	msg := PlaybackMessage{
+		Type:      "event",
+		SessionID: event.SessionID,
+		Command:   string(event.Command),
+		Position:  event.Position,
+		Volume:    event.Volume,
+	}
+	b, _ := json.Marshal(msg)
+	Broadcast(b)
 }

@@ -205,6 +205,10 @@ func (s *Server) handleWebSocket(c echo.Context) error {
 	return ws.HandleWebSocket(c, s.db)
 }
 
+func (s *Server) handlePlaybackWebSocket(c echo.Context) error {
+	return ws.HandlePlaybackWebSocketHTTP(c, s.auth)
+}
+
 func (s *Server) handleListCollections(c echo.Context) error {
 	user := auth.GetUser(c)
 	if user == nil {

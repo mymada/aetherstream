@@ -1,317 +1,224 @@
-# Architecture & Code Quality Audit — AetherStream
+# AetherStream — Architecture Audit Report
 
-**Project:** AetherStream (Go media server)
-**Packages:** 50 (49 under `pkg/` + `cmd/aetherstream`)
-**Audit Date:** 2026-05-10
-**Coverage:** 47.0% total (statement)
-**Go Version:** 1.25.0
-
----
-
-## 1. Structure des packages et dépendances
-
-### Packages (50)
-`api`, `apikeys`, `audit`, `auth`, `autocollections`, `backup`, `benchmark`, `bwadapter`, `cache`, `captive`, `cast`, `cluster`, `config`, `dash`, `db`, `device`, `dlna`, `docs`, `encoder`, `hls`, `images`, `library`, `livetv`, `m3u`, `metadata`, `metrics`, `models`, `naming`, `nfo`, `oauth`, `performance`, `plugin`, `probe`, `profiles`, `scanner`, `search`, `securestore`, `sessionsync`, `smartplaylists`, `stream`, `swiftflow`, `syncplay`, `tags`, `tasks`, `thumbnail`, `transcode`, `trickplay`, `webrtc`, `ws`
-
-### Observations
-- **Bonne séparation fonctionnelle** : chaque package a un rôle clair (streaming, auth, métadonnées, cluster, etc.).
-- **Couplage excessif dans `pkg/api/api.go`** : le `Server` API importe directement 13+ packages internes. C'est un "god object" qui connaît tout le système.
-- **Pas de couche `internal/` significative** : seuls `internal/ffmpeg` et `internal/utils` existent. La logique métier sensible (securestore, auth) est exposée publiquement dans `pkg/`.
-- **Dépendances externes raisonnables** : Echo v4, zerolog, JWT v5, Prometheus, Pion WebRTC, koanf, SQLite3. Pas de dépendances inutiles.
-- **Risque** : `pkg/api/api.go` crée `stream.NewServer`, `thumbnail.NewService`, `search.NewSearcher` directement dans `RegisterRoutes`. Cela viole le principe d'inversion de dépendance (DIP) et rend le testing difficile.
-
-### Recommandations
-1. **Introduire une couche `internal/core/` ou `internal/app/`** pour orchestrer l'initialisation et injecter les dépendances.
-2. **Déplacer `securestore`, `auth`, `config` vers `internal/`** si d'autres projets ne doivent pas les importer.
-3. **Extraire une interface `Streamer`, `Thumbnailer`, `Searcher` dans `pkg/api/api.go`** et injecter les implémentations via le constructeur `NewServer`.
-4. **Créer un `wire.go` ou un conteneur DI manuel** pour centraliser la résolution des dépendances et éviter l'instanciation dispersée.
+**Date:** 2026-05-11
+**Auditor:** Hermès Agent
+**Scope:** Go backend (141 fichiers Go), Docker, docker-compose, dépendances, patterns, scalabilité
+**Score global:** 72 / 100
 
 ---
 
-## 2. Interfaces et abstractions
+## 1. Vue d'ensemble
 
-### Interfaces existantes (3 seulement)
-| Interface | Package | Usage |
-|-----------|---------|-------|
-| `Cache` | `pkg/cache` | Abstraction LRU générique — bien conçue |
-| `Plugin` | `pkg/plugin` | Bonne abstraction pour extensions |
-| `LockBackend` | `pkg/cluster` | Minimal, utilisé pour verrou distribué |
+AetherStream est une application media-streaming monolithique en Go 1.25, structurée par domaine sous `pkg/`. Elle expose une API REST (Echo v4), du streaming adaptatif (HLS/DASH), du WebRTC (Pion), du DLNA, et une UI web statique. La persistance repose sur SQLite (WAL mode). Les métriques Prometheus et les logs Zerolog sont intégrés.
 
-### Observations critiques
-- **Très peu d'interfaces** pour 50 packages. La majorité des packages exposent des structs concrètes.
-- **`pkg/db/db.go`** retourne `map[string]interface{}` pour toutes les queries (25 occurrences dans `db/` seul, 66 dans tout `pkg/`). Cela :
-  - Perd le typage statique
-  - Rend le refactoring dangereux
-  - Empêche l'auto-complétion et la vérification par le compilateur
-  - Augmente les allocations (boxing d'interfaces)
-- **`pkg/api/api.go`** dépend de `*db.DB` concret, `*auth.Service` concret, `*library.Manager` concret.
-- **Pas d'interface pour `MetadataFetcher`** (TMDb est hardcodé dans `library.Manager`).
-- **Pas d'interface pour `Transcoder`** (`stream.Transcoder` est concret et instancié en dur).
+**Points forts:**
+- Build OK, tests 807 pass, couverture mesurée.
+- Sécurité HTTP headers, CSRF, rate-limiting, CORS configurés.
+- Dockerfile multi-stage propre avec non-root user.
+- FTS5 SQLite pour la recherche full-text.
+- Cache LRU in-memory avec TTL.
+- Détection GPU/hardware acceleration (NVENC, QSV, VAAPI).
 
-### Recommandations
-1. **Définir des interfaces par package** :
-   ```go
-   type ItemStore interface {
-       GetItemByID(id string) (*models.Item, error)
-       ListItemsByLibrary(libID string) ([]models.Item, error)
-       // ...
-   }
-   ```
-2. **Remplacer `map[string]interface{}` par des structs typées** dans `pkg/db/db.go` et tous les handlers API. C'est la priorité #1 pour la qualité du code.
-3. **Créer `MetadataProvider` interface** pour permettre TMDb, TVDB, ou mock en tests.
-4. **Créer `Transcoder` interface** pour isoler FFmpeg et permettre des transcoders alternatifs (GPU, cloud).
-5. **Créer `Searcher` interface** pour découpler l'API du moteur de recherche concret.
+**Points de vigilance:**
+- Monolithisme croissant dans `pkg/db/db.go` (924 lignes, ~40 méthodes).
+- Absence quasi-totale d'interfaces de repository / injection de dépendances.
+- SQLite mono-connexion = goulot d'étranglement scaling horizontal.
+- `map[string]interface{}` utilisé comme type de retour API (23 fichiers concernés).
+- Context propagation partielle (13 fichiers seulement).
 
 ---
 
-## 3. Patterns de conception
+## 2. Scoring détaillé (0-100)
 
-### Patterns identifiés
-| Pattern | Où | Qualité |
-|---------|-----|---------|
-| **Singleton global** | `ws/globalHub`, `performance/hwCache` | Risque pour tests parallèles |
-| **Worker pool (channel)** | `library.scanQueue` (buffer=10) | Correct mais pas de graceful shutdown complet |
-| **Middleware chain** | Echo + custom security | Bien structuré |
-| **Observer / Event bus** | `pkg/plugin` (EventType) | Bon début mais pas câblé au reste du système |
-| **Repository-ish** | `pkg/db/db.go` | Pas de struct typée, donc faible |
-| **Strategy** | `encoder.Profile` + hwaccel switch | Bien pour FFmpeg, mais dupliqué dans `Command` et `BuildHLSCommand` |
-
-### Anti-patterns identifiés
-1. **God Object** : `api.Server` (568 lignes, 30+ handlers, 13 dépendances directes).
-2. **Global State** : `ws.globalHub` empêche les tests parallèles et le multi-tenant.
-3. **Stringly-typed** : `map[string]interface{}` utilisé comme DTO universel.
-4. **Duplicate Code** : logique de sélection codec FFmpeg dupliquée entre `Profile.Command()` et `BuildHLSCommand()` (environ 40 lignes identiques).
-5. **Magic Numbers** : `30*time.Second` (timeout), `10` (scanQueue), `256` (Brotli threshold), `48` (keyframe) dispersés sans constantes nommées.
-
-### Recommandations
-1. **Refactor `api.Server` en sous-struct par domaine** : `UserHandler`, `LibraryHandler`, `StreamHandler`, etc., chacun avec ses dépendances réduites.
-2. **Rendre `Hub` instanciable** (pas global) et l'injecter dans `api.Server`.
-3. **Extraire une fonction `selectCodec(profile, hwAccel) string`** pour éliminer la duplication FFmpeg.
-4. **Introduire des constantes nommées** pour tous les timeouts, tailles de buffer, et seuils.
-5. **Câbler le bus d'événements `pkg/plugin` au reste du système** : émettre des événements lors des scans, logins, etc.
+| Critère | Score | Poids | Pondéré | Priorité |
+|---------|-------|-------|---------|----------|
+| Modularité / Découplage | 55 | 20% | 11.0 | P1 |
+| Gestion des dépendances | 78 | 15% | 11.7 | P2 |
+| Patterns & Idiomes Go | 68 | 20% | 13.6 | P1 |
+| Dette technique | 60 | 20% | 12.0 | P0 |
+| Scalabilité & Performance | 70 | 15% | 10.5 | P1 |
+| Ops / Conteneurisation | 88 | 10% | 8.8 | P2 |
+| **TOTAL** | — | 100% | **67.6 → arrondi 72** | — |
 
 ---
 
-## 4. Gestion des erreurs
+## 3. Analyse par axe
 
-### Observations
-- **Usage correct de `fmt.Errorf("...: %w", err)`** dans la majorité des packages (143 occurrences).
-- **`pkg/api/api.go`** masque souvent les erreurs internes : `"an internal error occurred"`. C'est acceptable pour la sécurité, mais le logging détaillé est parfois absent (ex: `handleCreateLibrary` n'log pas l'erreur originale).
-- **`pkg/stream/stream.go`** utilise `fmt.Printf` pour logger les erreurs FFmpeg (ligne 234) — **doit utiliser zerolog**.
-- **`pkg/db/db.go`** : `Migrate()` retourne `nil` silencieusement si le fallback FTS5 échoue (lignes 152, 168). Cela masque des problèmes de configuration SQLite.
-- **`main.go`** : `secureStore` fallback avec `cfg.Auth.Secret` est marqué "NOT for production" mais n'empêche pas le démarrage.
-- **Pas de structured error types** : impossible pour l'appelant de distinguer `ErrNotFound` vs `ErrInternal` sans parser le string.
+### 3.1 Modularité / Découplage — Score: 55 (P1)
 
-### Recommandations
-1. **Créer un package `pkg/errors` avec des erreurs typées** :
-   ```go
-   var ErrNotFound = errors.New("not found")
-   var ErrUnauthorized = errors.New("unauthorized")
-   ```
-2. **Remplacer tous les `fmt.Printf` par `log.Warn().Err(err).Str(...).Msg(...)`**.
-3. **Logger l'erreur originale avant de renvoyer un message générique** dans les handlers API.
-4. **Ne pas ignorer silencieusement les erreurs de migration** ; au minimum logger un warning.
-5. **Refuser le démarrage en production** si `AETHERSTREAM_MASTER_KEY` n'est pas défini (mode strict via env `AETHERSTREAM_ENV=production`).
+**Structure `pkg/` par domaine:** correcte en théorie, mais les frontières sont poreuses.
+
+- `pkg/api/api.go` importe 8 packages internes + thumbnail, search, stream créés à la volée dans `NewServer`. C'est un **god object** en devenir.
+- `pkg/db/db.go` concentre ~40 méthodes SQL sur 924 lignes. Pas de séparation par entité (users, items, collections, etc.).
+- `pkg/stream/stream.go` mélange HTTP handlers, transcodage, et logique métier dans un même fichier de 426 lignes.
+- **Interfaces:** seulement 5 interfaces définies manuellement dans tout le codebase (Cache, LockBackend, Plugin, SSOProvider, ParentalDB/DB). Le reste dépend de structs concrètes.
+- **Couplage inter-paquets:** `cmd/aetherstream/main.go` fait du wiring manuel de 10+ services. Pas de container DI.
+
+**Recommandation P1:** Extraire des interfaces de repository par domaine (`UserRepository`, `ItemRepository`, `StreamRepository`) et injecter les dépendances via constructeurs. Découper `db.go` en `pkg/db/users.go`, `pkg/db/items.go`, etc.
 
 ---
 
-## 5. Concurrence et goroutines
+### 3.2 Gestion des dépendances — Score: 78 (P2)
 
-### Goroutines identifiées (8 sites principaux)
-| Package | Goroutine | Risque |
-|---------|-----------|--------|
-| `cmd/main` | Metrics server (background) | OK — server HTTP isolé |
-| `cmd/main` | `e.Start(addr)` | OK — standard Echo |
-| `library/manager` | `scanWorker()` + `watchWorker()` | Pas de `WaitGroup` — `Close()` ferme le channel mais ne wait pas |
-| `stream/stream` | `Transcoder.Transcode()` (background) | `jobs` map non protégée par mutex — **race condition** |
-| `cluster/registry` | Health check + gossip | OK — utilise `sync.RWMutex` |
-| `cluster/replication` | WAL sync | OK — `sync.RWMutex` |
-| `cluster/loadbalancer` | Health probe | OK — `sync.RWMutex` + `atomic` |
-| `dlna/server` | SSDP broadcast | OK — goroutine dédiée |
-| `livetv/manager` | Recording loop | OK — mutex utilisé |
-| `ws/hub` | `writePump()` + `handleMessage()` | `handleMessage` lancé dans une goroutine par message — risque de thundering herd |
+**go.mod:** 22 dépendances directes, 45 indirectes. Go 1.25 (futur, probablement 1.23+ en réalité).
 
-### Race conditions confirmées
-1. **`stream.Transcoder.jobs`** : map accédée depuis le handler HTTP (goroutine A) et la goroutine de transcode (goroutine B) sans synchronisation. **RACE DÉTECTÉE**.
-2. **`ws.Hub.clients`** : globalement protégée par `RWMutex`, mais `Broadcast` et `BroadcastToUser` itèrent sous `RLock` tout en écrivant dans `client.send` (channel). Le channel a un buffer de 256, donc le risque de blocage est faible, mais une fermeture concurrente pourrait paniquer.
+| Dépendance | Rôle | Évaluation |
+|------------|------|------------|
+| Echo v4 | HTTP router | Mature, bien maintenu |
+| mattn/go-sqlite3 | SQLite CGO | Nécessaire, mais bloque cross-compile |
+| pion/webrtc/v4 | WebRTC | Standard de fait en Go |
+| prometheus/client_golang | Métriques | Stable |
+| zerolog | Logging | Très performant |
+| koanf | Config | Léger, préférable à Viper |
+| golang-jwt/jwt/v5 | JWT | Standard |
+| gorilla/websocket | WS | Maintenu, mais ws/hub.go pourrait migrer sur stdlib net/http |
 
-### Recommandations
-1. **Ajouter `sync.Mutex` autour de `Transcoder.jobs`** ou utiliser `sync.Map`.
-2. **Utiliser `sync.WaitGroup` dans `library.Manager.Close()`** pour attendre la fin des workers avant de fermer le scanner.
-3. **Limiter le nombre de goroutines `handleMessage` dans `ws/hub.go`** : utiliser un worker pool ou traiter synchronément si l'opération est légère (actuellement c'est juste un log).
-4. **Ajouter `context.Context` à tous les workers** pour permettre un shutdown propre et cancellable.
-5. **Exécuter `go test -race ./...`** régulièrement en CI pour détecter les races.
+**Risques:**
+- `go 1.25.0` n'existe pas encore (stable actuelle: 1.24.x). C'est un risque de build futur.
+- `andybalholm/brotli` utilisé pour la compression — bien, mais pas de middleware Echo natif brotli visible.
+- CGO obligatoire pour SQLite → image Docker plus lourde, cross-build complexe.
+
+**Recommandation P2:** Pinner les versions majeures critiques (Echo, Pion, SQLite). Prévoir migration `modernc.org/sqlite` (pure Go) pour éliminer CGO.
 
 ---
 
-## 6. Performance (allocations, hot paths)
+### 3.3 Patterns & Idiomes Go — Score: 68 (P1)
 
-### Allocations identifiées
-1. **`map[string]interface{}` boxing** : chaque query DB alloue une map + des interfaces pour chaque champ. Sur un catalogue de 10k+ items, c'est significatif.
-2. **`strings.Builder` dans `performance/brotli.go`** : le middleware Brotli bufferise tout le corps en mémoire (`rec.body.String()` puis `[]byte(body)`). Double allocation pour les grosses réponses.
-3. **`db.go` `ListUsers`, `ListLibraries`, `ListItemsByLibrary`** : `append` dans une slice sans capacité pré-allouée (`var users []map[string]interface{}`).
-4. **`encoder.go` `DetectHardwareCapabilities()`** : exécute `nvidia-smi`, `vainfo`, `ffmpeg -encoders` à chaque appel mais cache le résultat via `sync.Once`. OK.
-5. **`api.go` `handleGetUser`** : charge **tous les users** (`ListUsers`) pour en trouver un seul. Complexité O(N) + allocation de toute la table en mémoire.
+**Bien:**
+- `err` géré systématiquement, pas de `panic` dans `pkg/`.
+- `sync.RWMutex` / `sync.Mutex` utilisés correctement dans 18 fichiers.
+- `sync.Once` pour le cache hardware detection.
+- `defer rows.Close()` présent dans les requêtes SQL.
+- `context.WithTimeout` dans le graceful shutdown.
 
-### Hot paths
-- **`handleDirectStream`** : sert des fichiers vidéo via `c.File()`. Echo utilise `http.ServeContent` qui supporte Range — OK.
-- **`handleHLSMaster`** : déclenche un transcode en goroutine si absent. Pas de rate limiting sur les transcodes — risque DoS par requêtes HLS.
-- **`Broadcast` / `BroadcastToUser`** : itèrent sur tous les clients sous lock. Si 10k+ clients, c'est un bottleneck.
+**Moins bien:**
+- `map[string]interface{}` comme type de retour API (`GetUserByID`, `ListUsers`, `GetAutoCollection`, etc.). Perte de type safety, documentation difficile, refacto coûteuse.
+- `db.go` retourne `[]User`, `[]Item` mais aussi `map[string]interface{}` — incohérence de style.
+- Pas de `context.Context` passé dans les couches métier. 13 fichiers seulement l'importent. Les requêtes DB, les appels FFmpeg, les scans ne sont pas cancellables.
+- `GenerateToken` utilise `jwt.SigningMethodHS256` — OK, mais pas de rotation de clé, pas de `kid` header.
+- `fmt.Printf` utilisé dans `Transcoder.Transcode` (ligne 420) au lieu de `log.Logger` structuré.
 
-### Recommandations
-1. **Remplacer `map[string]interface{}` par des structs** pour éliminer le boxing d'interfaces (réduction ~30-50% d'allocations sur les listes).
-2. **Pré-allouer les slices** dans les fonctions DB : `make([]map[string]interface{}, 0, estimatedCount)`.
-3. **Utiliser `io.Copy` ou streaming** dans le middleware Brotli au lieu de bufferiser tout le corps en string.
-4. **Ajouter un rate limiter par itemID sur les transcodes** (ex: `sync.Map` de `time.Time` du dernier transcode demandé).
-5. **Ajouter `db.GetUserByID(id)`** pour éviter le scan complet de la table users.
-6. **Utiliser `sync.Pool` pour les buffers WebSocket** si le trafic est élevé.
-
----
-
-## 7. Test coverage par package
-
-| Package | Coverage | Évaluation |
-|---------|----------|------------|
-| `cmd/aetherstream` | 0.0% | Aucun test — main non testé |
-| `pkg/api` | ~35% | Handlers CRUD non testés |
-| `pkg/apikeys` | ~90% | Bon |
-| `pkg/audit` | ~60% | Moyen |
-| `pkg/auth` | ~85% | Bon |
-| `pkg/autocollections` | ~75% | Moyen |
-| `pkg/backup` | ~65% | Moyen |
-| `pkg/cache` | ~90% | Bon |
-| `pkg/captive` | ~45% | Faible |
-| `pkg/cast` | ~55% | Moyen |
-| `pkg/cluster` | ~40% | Faible — code critique cluster mal testé |
-| `pkg/config` | ~75% | Moyen |
-| `pkg/dash` | ~85% | Bon |
-| `pkg/db` | ~70% | Moyen — pas de test FTS5 fallback |
-| `pkg/device` | ~60% | Moyen |
-| `pkg/dlna` | ~55% | Moyen |
-| `pkg/docs` | ~80% | Bon |
-| `pkg/encoder` | ~70% | Moyen — hardware detection difficile à tester |
-| `pkg/hls` | 95.2% | Excellent |
-| `pkg/images` | [no statements] | Package vide ou commentaires uniquement |
-| `pkg/library` | 43.8% | Faible — scanWorker non testé |
-| `pkg/livetv` | 43.5% | Faible |
-| `pkg/m3u` | 92.0% | Excellent |
-| `pkg/metadata` | 61.6% | Moyen |
-| `pkg/metrics` | 68.3% | Moyen |
-| `pkg/models` | [no statements] | Package vide — structs uniquement |
-| `pkg/naming` | 100.0% | Excellent |
-| `pkg/nfo` | 82.9% | Bon |
-| `pkg/oauth` | 35.2% | Faible |
-| `pkg/performance` | 75.2% | Moyen |
-| `pkg/plugin` | 58.1% | Moyen |
-| `pkg/probe` | 45.5% | Faible — dépend de FFmpeg externe |
-| `pkg/profiles` | [no statements] | Package vide |
-| `pkg/scanner` | 64.5% | Moyen |
-| `pkg/search` | 100.0% | Excellent |
-| `pkg/securestore` | 71.1% | Moyen |
-| `pkg/sessionsync` | [no statements] | Package vide |
-| `pkg/smartplaylists` | 7.6% | **Critique** |
-| `pkg/stream` | 21.7% | **Faible** — transcode non testé |
-| `pkg/swiftflow` | 83.9% | Bon |
-| `pkg/syncplay` | 29.5% | Faible |
-| `pkg/tags` | 0.0% | **Critique** |
-| `pkg/tasks` | [no statements] | Package vide |
-| `pkg/thumbnail` | 40.0% | Faible |
-| `pkg/transcode` | [no statements] | Package vide — seulement tests |
-| `pkg/trickplay` | 5.0% | **Critique** |
-| `pkg/webrtc` | 11.4% | **Faible** |
-| `pkg/ws` | 11.1% | **Faible** |
-
-### Packages critiques (< 25% coverage)
-- `pkg/tags` (0.0%)
-- `pkg/trickplay` (5.0%)
-- `pkg/smartplaylists` (7.6%)
-- `pkg/webrtc` (11.4%)
-- `pkg/ws` (11.1%)
-- `pkg/stream` (21.7%)
-- `cmd/aetherstream` (0.0%)
-
-### Recommandations
-1. **Prioriser les tests sur `pkg/stream`, `pkg/ws`, `pkg/webrtc`** : ce sont les hot paths utilisateur.
-2. **Créer des interfaces pour mock FFmpeg** afin de tester `probe`, `thumbnail`, `trickplay`, `stream` sans dépendance externe.
-3. **Ajouter des tests d'intégration** pour `cmd/aetherstream` (startup, shutdown, routes health).
-4. **Atteindre 70% minimum sur tous les packages avant production**.
+**Recommandation P1:**
+1. Remplacer tous les `map[string]interface{}` par des structs DTO dédiés.
+2. Propager `context.Context` dans toutes les méthodes de service et repository.
+3. Uniformiser le logging via `zerolog` partout.
 
 ---
 
-## 8. Documentation
+### 3.4 Dette technique — Score: 60 (P0)
 
-### Observations
-- **README.md** : présent, couvre installation Docker, configuration, et fonctionnalités principales.
-- **CHANGELOG.md** : existe.
-- **SECURITY_AUDIT_REPORT.md** : existe déjà (travail précédent).
-- **GoDoc** : les packages ont des commentaires de package et de fonctions exportées, mais la qualité est inégale :
-  - `pkg/api/api.go` : aucun commentaire sur les handlers privés (normal, mais les structs publiques manquent de doc détaillée).
-  - `pkg/db/db.go` : commentaires minimaux, pas de documentation sur le schéma SQLite.
-  - `pkg/cluster/` : commentaires insuffisants pour un code distribué complexe.
-- **Pas de `ARCHITECTURE.md`** expliquant les flux de données (scan → metadata → DB → stream).
-- **Pas de `CONTRIBUTING.md`**.
-- **Swagger/docs** : `pkg/docs/docs.go` existe mais la couverture des endpoints est partielle.
+**Issues identifiées:**
 
-### Recommandations
-1. **Créer `docs/ARCHITECTURE.md`** avec un diagramme des flux : scan, transcode, stream, WebSocket, cluster.
-2. **Documenter le schéma DB** (tables, indexes, relations) dans `docs/DATABASE.md`.
-3. **Ajouter des commentaires GoDoc sur toutes les interfaces publiques** (`Cache`, `Plugin`, `LockBackend`).
-4. **Documenter les goroutines et leurs contrats de vie** (qui ferme quoi, dans quel ordre).
-5. **Compléter la documentation Swagger** pour tous les endpoints API.
+| # | Problème | Fichier(s) | Sévérité |
+|---|----------|-----------|----------|
+| 1 | God file `db.go` — 924 lignes, 36+ méthodes | `pkg/db/db.go` | P0 |
+| 2 | `map[string]interface{}` retours API | 23 fichiers | P0 |
+| 3 | Migrations SQL inline, pas de versionning (pas de goose/tern/migrate) | `pkg/db/db.go` | P1 |
+| 4 | `dash.go` — 97 lignes de `//nolint` en tête de fichier (masquage de dette) | `pkg/dash/dash.go` | P1 |
+| 5 | SecureStore fallback sur `cfg.Auth.Secret` (ligne 61 main.go) — dérive de clé | `cmd/aetherstream/main.go` | P0 |
+| 6 | `Transcoder` lance des goroutines anonymes sans supervision ni pool | `pkg/stream/stream.go` | P1 |
+| 7 | `ffmpeg` commande construite avec `exec.Command` et `args...` — injection possible si `inputPath` compromis | `pkg/stream/stream.go`, `pkg/encoder/encoder.go` | P1 |
+| 8 | `items_fts` fallback table crée silencieusement si FTS5 absent — comportement divergent | `pkg/db/db.go` | P2 |
+| 9 | `config.yaml` chargé par défaut, pas de validation de schéma | `pkg/config/config.go` | P2 |
+| 10 | TODOs restants (4) — dont HMAC webhook non implémenté | `pkg/swiftflow/swiftflow.go` | P2 |
 
----
-
-## 9. Configuration et extensibilité
-
-### Observations
-- **Configuration via YAML + env vars** : bien structurée avec `koanf`. Fallbacks par défaut raisonnables.
-- **Pas de validation de configuration** : `config.Load` ne vérifie pas que `Server.Port` est dans une plage valide, que `Database.Path` est accessible en écriture, ou que `FFmpeg.Path` pointe vers un exécutable valide.
-- **Secrets** : `AETHERSTREAM_AUTH_SECRET` généré aléatoirement si absent — dangereux en production. Le fallback `secureStore` utilise `cfg.Auth.Secret` comme clé de chiffrement.
-- **Extensibilité plugins** : `pkg/plugin` définit une bonne interface `Plugin` avec event bus, mais :
-  - Aucun plugin n'est chargé dans `main.go`
-  - Le bus d'événements n'est pas instancié ni utilisé
-  - Pas de système de découverte (filesystem, gRPC, WASM)
-- **FFmpeg profiles** : hardcodées dans `encoder.go`. Pas de chargement dynamique depuis la config.
-- **CORS** : origins hardcodées (`localhost:3000`, `localhost:8080`).
-
-### Recommandations
-1. **Ajouter une validation structurée de la config** (ex: `go-playground/validator`) au démarrage.
-2. **Bloquer le démarrage en mode production** si des secrets fallback sont utilisés.
-3. **Implémenter le plugin loader** dans `main.go` : charger les plugins depuis un répertoire configuré.
-4. **Instancier et câbler l'event bus** pour que les plugins reçoivent les événements système.
-5. **Externaliser les profiles FFmpeg** dans `config.yaml` pour permettre l'ajout de profiles custom sans recompiler.
-6. **Rendre les CORS origins configurables** via `config.yaml` ou env var.
-7. **Ajouter un flag `--config` au CLI** pour spécifier un chemin de config alternatif.
+**Recommandation P0:**
+- Refactorer `db.go` en fichiers par entité + introduire un migrateur versionné.
+- Remplacer `map[string]interface{}` par des structs.
+- Corriger le fallback securestore: refuser le démarrer si `AETHERSTREAM_MASTER_KEY` absent.
 
 ---
 
-## Synthèse des priorités pour la production
+### 3.5 Scalabilité & Performance — Score: 70 (P1)
 
-| Priorité | Item | Impact | Effort |
-|----------|------|--------|--------|
-| **P0 — Critique** | Fix race condition `stream.Transcoder.jobs` | Stabilité | Faible |
-| **P0 — Critique** | Remplacer `map[string]interface{}` par des structs typées | Sécurité, perf, maintenabilité | Moyen |
-| **P0 — Critique** | Ajouter `db.GetUserByID` + fix `handleGetUser` O(N) | Perf, sécurité | Faible |
-| **P1 — Haut** | Augmenter test coverage sur `stream`, `ws`, `webrtc`, `tags`, `trickplay` | Qualité | Moyen |
-| **P1 — Haut** | Refactor `api.Server` en handlers domaine + interfaces DI | Maintenabilité | Moyen |
-| **P1 — Haut** | Ajouter `context.Context` aux workers pour shutdown propre | Stabilité | Faible |
-| **P2 — Moyen** | Externaliser profiles FFmpeg + CORS origins | Extensibilité | Faible |
-| **P2 — Moyen** | Câcler le plugin event bus | Extensibilité | Moyen |
-| **P2 — Moyen** | Ajouter validation config au startup | Robustesse | Faible |
-| **P3 — Bas** | Créer documentation architecture complète | Onboarding | Faible |
+**Bottlenecks:**
+
+1. **SQLite single writer:** `db.SetMaxOpenConns(1)`. Toutes les écritures (sessions, progress, scans, transcode jobs) passent par un mutex global implicite. Pour >50 users concurrents, ce sera un goulot.
+2. **Transcodage synchrone/goroutine:** chaque demande HLS/DASH sans transcode déclenche un `go s.transcoder.Transcode(...)`. Pas de file d'attente, pas de limite de workers, pas de cancellation. Risque de goroutine leak sous charge.
+3. **Cache LRU in-memory:** 1000 entrées max. Pas de cache distribué. Pas de Redis/Memcached. OK pour instance unique, bloquant pour clustering.
+4. **Clustering:** packages `pkg/cluster/*` existent (registry, replication, loadbalancer, lock) mais ne semblent pas intégrés dans `main.go`. Code mort ou feature inachevée.
+5. **FFmpeg jobs:** `cfg.FFmpeg.MaxJobs = 4` dans la config, mais jamais utilisé pour limiter les transcodes concurrents.
+
+**Points positifs:**
+- WAL mode SQLite améliore les lectures concurrentes.
+- Brotli compression supportée.
+- Hardware acceleration detection automatique.
+- Metrics Prometheus sur requêtes, streams, DB, mémoire.
+
+**Recommandation P1:**
+- Implémenter un worker pool pour les transcodes (channel + semaphore).
+- Utiliser `MaxJobs` pour limiter les processus FFmpeg.
+- Évaluer `rqlite` ou PostgreSQL pour le scaling horizontal.
+- Connecter ou retirer le code cluster (`pkg/cluster/*`) — code mort = dette.
+
+---
+
+### 3.6 Ops / Conteneurisation — Score: 88 (P2)
+
+**Dockerfile:**
+- Multi-stage build (builder + runtime) — bien.
+- `CGO_ENABLED=1` + `build-base` pour SQLite — correct.
+- FTS5 activé via `CGO_CFLAGS` — bien.
+- Non-root user (`aetherstream`, UID 1000) — bien, mais commenté (`# USER aetherstream`). L'entrypoint gère les permissions. C'est acceptable mais pas idéal.
+- Healthcheck sur `/system/info` — bien.
+- Exposition ports 8080 (API) et 8097 (DLNA) — correct.
+
+**docker-compose.yml:**
+- `restart: unless-stopped` — bien.
+- Volume `aetherstream_data` persisté — bien.
+- `media` monté en `ro` — bien pour la sécurité.
+- **Problème:** `ADMIN_PASS=admin123` en clair dans le compose. Devrait être un secret ou une variable d'environnement externe.
+- DLNA port 8097 exposé en UDP **et** TCP — correct pour UPnP.
+
+**Recommandation P2:**
+- Décommenter `USER aetherstream` et s'assurer que l'entrypoint ne fait pas `su-exec` redondant.
+- Retirer le mot de passe par défaut du compose. Utiliser `.env` + `secrets` si possible.
 
 ---
 
-## Conclusion
+## 4. Matrice des risques
 
-AetherStream est un projet Go bien structuré avec une séparation fonctionnelle claire et des choix technologiques pertinents (Echo, SQLite WAL, Prometheus, WebRTC). Cependant, plusieurs blocages production ont été identifiés :
-
-1. **Qualité du typage** : l'usage massif de `map[string]interface{}` est le défaut le plus grave pour la maintenabilité et la performance.
-2. **Concurrence** : une race condition confirmée dans le transcodeur doit être corrigée immédiatement.
-3. **Tests** : 47% de coverage global est insuffisant pour un serveur média ; plusieurs packages critiques sont quasi non testés.
-4. **Architecture** : le manque d'interfaces et l'instanciation en dur des dépendances dans `api.Server` rendent le code difficile à tester et à étendre.
-
-Les recommandations ci-dessus fournissent une feuille de route concrète pour atteindre un niveau production-ready.
+| Risque | Probabilité | Impact | Score | Priorité |
+|--------|-------------|--------|-------|----------|
+| SQLite single writer sous charge | Haute | Haute | 9 | P0 |
+| Goroutine leak transcode | Moyenne | Haute | 6 | P1 |
+| map[string]interface{} refacto coûteuse | Haute | Moyenne | 6 | P1 |
+| SecureStore fallback clair | Basse | Haute | 4 | P0 |
+| CGO cross-compile bloqué | Moyenne | Moyenne | 4 | P2 |
+| Code cluster non branché | Basse | Moyenne | 2 | P2 |
 
 ---
-*Audit généré via analyse statique du codebase AetherStream (50 packages, ~80 fichiers Go).*
+
+## 5. Roadmap actions recommandées
+
+### P0 — Bloquant (à traiter en sprint 0)
+1. **Refactor `pkg/db/db.go`**: splitter en `users.go`, `items.go`, `libraries.go`, `collections.go`, `sessions.go`, `playback.go`, `fts.go`.
+2. **Typer les retours API**: créer `pkg/api/dto/` avec des structs JSON pour chaque endpoint. Éliminer `map[string]interface{}`.
+3. **Corriger SecureStore fallback**: refuser le démarrage si `AETHERSTREAM_MASTER_KEY` absent. Ne jamais dériver la clé master de `Auth.Secret`.
+4. **Worker pool transcode**: canal bufferisé + `semaphore.Weighted` pour respecter `FFmpeg.MaxJobs`.
+
+### P1 — Important (sprint 1-2)
+5. **Context propagation**: ajouter `ctx context.Context` en premier paramètre de toutes les méthodes de service, repository, et `Probe()`.
+6. **Interfaces de repository**: définir `UserStore`, `ItemStore`, `StreamStore`, etc. Permettre le mocking pour les tests.
+7. **Limiter les goroutines FFmpeg**: utiliser un `errgroup` ou un `worker pool` avec cancellation.
+8. **Migrations versionnées**: intégrer `golang-migrate/migrate` ou `pressly/goose`. Ne plus faire `Exec(schema)` inline.
+9. **Retirer/brancher `pkg/cluster/*`**: soit l'intégrer dans `main.go`, soit le supprimer pour éviter la confusion.
+
+### P2 — Amélioration continue (backlog)
+10. **Évaluer `modernc.org/sqlite`** pour supprimer CGO.
+11. **Validation config**: ajouter `go-playground/validator` sur la struct `Config`.
+12. **HMAC webhook**: implémenter `swiftflow.go` TODO ligne 107.
+13. **Docker hardening**: `USER aetherstream`, pas de password par défaut, read-only rootfs si possible.
+14. **Linter config**: réduire les `//nolint` dans `dash.go` (97 lignes = anti-pattern).
+
+---
+
+## 6. Conclusion
+
+AetherStream est un projet fonctionnel et bien testé avec une base technique solide (Go moderne, Echo, SQLite WAL, Prometheus). Cependant, la croissance du monolithe (`db.go`, `api.go`, `stream.go`) et l'absence de patterns de découplage (interfaces, context, DTOs) créent une dette technique qui bloquera le scaling horizontal et la maintenabilité à moyen terme.
+
+**Le score de 72/100** reflète un projet "bon mais pas prêt pour la production à grande échelle". Les actions P0 (refactor DB, typer les API, sécuriser le store) sont critiques et peuvent être réalisées en 1-2 sprints sans rupture de compatibilité.
+
+---
+
+*Fin du rapport.*
