@@ -174,7 +174,7 @@ func HasScope(key *Key, scope string) bool {
 }
 
 func hashKey(raw string) string {
-	h, _ := bcrypt.GenerateFromPassword([]byte(raw), bcrypt.DefaultCost)
+	h, _ := bcrypt.GenerateFromPassword([]byte(raw), 12)
 	return string(h)
 }
 

@@ -288,7 +288,7 @@ func (m *Manager) recordStream(ch *Channel, rec *Recording) {
 	}
 	defer resp.Body.Close()
 
-	f, err := os.Create(rec.FilePath)
+	f, err := os.OpenFile(rec.FilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0640)
 	if err != nil {
 		log.Error().Err(err).Str("path", rec.FilePath).Msg("recording file create failed")
 		rec.Status = "failed"

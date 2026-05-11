@@ -47,6 +47,7 @@ type Service struct {
 	states    map[string]time.Time // state -> expiry
 	stateMu   sync.RWMutex
 	providers map[string]*oauth2.Config
+	stopClean chan struct{}        // signals cleanup goroutine
 }
 
 // NewService creates OAuth service with provider configs
@@ -56,7 +57,11 @@ func NewService(cfg Config) *Service {
 		logger:    zerolog.New(nil),
 		states:    make(map[string]time.Time),
 		providers: make(map[string]*oauth2.Config),
+		stopClean: make(chan struct{}),
 	}
+
+	// Start periodic cleanup of expired OAuth states
+	go s.cleanupLoop()
 
 	if cfg.Google.Enabled {
 		s.providers["google"] = &oauth2.Config{
@@ -272,4 +277,35 @@ func (s *Service) RegisterRoutes(e *echo.Echo, callbackHandler echo.HandlerFunc)
 
 	// GET /auth/oauth/:provider/callback — provider redirects here
 	e.GET("/auth/oauth/:provider/callback", callbackHandler)
+}
+
+// cleanupLoop periodically removes expired OAuth states every 5 minutes
+func (s *Service) cleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.purgeExpiredStates()
+		case <-s.stopClean:
+			return
+		}
+	}
+}
+
+// purgeExpiredStates deletes all expired states from the map
+func (s *Service) purgeExpiredStates() {
+	now := time.Now()
+	s.stateMu.Lock()
+	for state, expiry := range s.states {
+		if now.After(expiry) {
+			delete(s.states, state)
+		}
+	}
+	s.stateMu.Unlock()
+}
+
+// Stop halts the background cleanup goroutine
+func (s *Service) Stop() {
+	close(s.stopClean)
 }

@@ -25,9 +25,20 @@ func NewStore(password string) (*Store, error) {
 	if len(password) < 8 {
 		return nil, errors.New("securestore password must be at least 8 characters")
 	}
-	salt := []byte("aetherstream-static-salt-v1")
+	return &Store{key: deriveKey(password, nil)}, nil
+}
+
+// deriveKey generates a 32-byte key via PBKDF2.
+// If salt is nil, a random 16-byte salt is generated and prepended to the key.
+func deriveKey(password string, salt []byte) []byte {
+	if salt == nil {
+		salt = make([]byte, 16)
+		if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+			panic(fmt.Sprintf("failed to generate salt: %v", err))
+		}
+	}
 	key := pbkdf2.Key([]byte(password), salt, 100000, 32, sha256.New)
-	return &Store{key: key}, nil
+	return append(salt, key...)
 }
 
 // NewStoreFromEnv creates store from environment variable, deriving key via PBKDF2.
@@ -39,9 +50,10 @@ func NewStoreFromEnv(envVar string) (*Store, error) {
 	return NewStore(password)
 }
 
-// Encrypt encrypts plaintext with AES-256-GCM, returns base64 ciphertext
+// Encrypt encrypts plaintext with AES-256-GCM, returns base64 ciphertext.
+// The salt (first 16 bytes of s.key) is embedded in the output via the key derivation.
 func (s *Store) Encrypt(plaintext string) (string, error) {
-	block, err := aes.NewCipher(s.key)
+	block, err := aes.NewCipher(s.key[16:])
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +79,7 @@ func (s *Store) Decrypt(ciphertextB64 string) (string, error) {
 		return "", fmt.Errorf("decode: %w", err)
 	}
 
-	block, err := aes.NewCipher(s.key)
+	block, err := aes.NewCipher(s.key[16:])
 	if err != nil {
 		return "", err
 	}
