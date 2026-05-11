@@ -116,6 +116,27 @@ func (s *Server) handleGetUser(c echo.Context) error {
 	return c.JSON(http.StatusOK, user)
 }
 
+func (s *Server) handleRegister(c echo.Context) error {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+	if req.Username == "" || req.Password == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "username and password required")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return echo.NewHTTPError(500, "password hashing failed")
+	}
+	id := uuid.New().String()
+	if err := s.db.CreateUser(id, req.Username, string(hash), "user"); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "an internal error occurred")
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"id": id, "username": req.Username, "role": "user"})
+}
 func (s *Server) handleCreateUser(c echo.Context) error {
 	var req struct {
 		Username string `json:"username"`

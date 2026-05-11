@@ -21,7 +21,7 @@ import (
 func (s *Server) handleSystemInfo(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"name":    "AetherStream",
-		"version": "1.3.0",
+		"version": "1.5.0",
 		"status":  "ok",
 	})
 }

@@ -62,6 +62,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 
 	// Auth routes (public)
 	e.POST("/auth/login", s.handleLogin, RateLimitByIP(10))
+	e.POST("/auth/register", s.handleRegister, RateLimitByIP(10))
 	e.POST("/auth/callback", s.handleAuthCallback, RateLimitByIP(10))
 	e.POST("/webhooks/swiftflow", s.handleSwiftFlowWebhook, RateLimitByIP(100))
 

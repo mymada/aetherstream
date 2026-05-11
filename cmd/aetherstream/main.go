@@ -127,6 +127,14 @@ func main() {
 		return c.File(webUIPath + "/index.html")
 	})
 
+	// TV mode — same SPA, React Router handles /tv
+	e.GET("/tv", func(c echo.Context) error {
+		return c.File(webUIPath + "/index.html")
+	})
+	e.GET("/tv/*", func(c echo.Context) error {
+		return c.File(webUIPath + "/index.html")
+	})
+
 	// DLNA/UPnP server
 	dlnaServer := dlna.NewServer(database, cfg.Server.Host, cfg.Server.Port+1, "AetherStream")
 	if err := dlnaServer.Start(); err != nil {
