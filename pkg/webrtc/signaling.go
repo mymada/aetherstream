@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog/log"
+
+	"github.com/devuser/aetherstream/pkg/config"
 )
 
 // SignalingServer handles WebRTC SDP exchange via WebSocket
@@ -29,10 +32,22 @@ type PeerConnection struct {
 }
 
 // NewSignalingServer creates a new WebRTC signaling server
-func NewSignalingServer() *SignalingServer {
+func NewSignalingServer(cfg *config.Config) *SignalingServer {
+	allowed := []string{"http://localhost:8080", "http://localhost:8081"}
+	if cfg != nil && len(cfg.Server.AllowedOrigins) > 0 {
+		allowed = cfg.Server.AllowedOrigins
+	}
 	return &SignalingServer{
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				for _, o := range allowed {
+					if strings.EqualFold(origin, o) {
+						return true
+					}
+				}
+				return false
+			},
 		},
 		peers: make(map[string]*PeerConnection),
 	}

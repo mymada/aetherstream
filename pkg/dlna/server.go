@@ -758,18 +758,42 @@ func (s *Server) handleContentDelivery(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, item.Path)
 }
 
-// isPathInMediaDirs checks if a path is within any of the allowed media directories
+// isPathInMediaDirs checks if a path is within any of the allowed media directories.
+// It resolves symlinks to prevent path-traversal via symlink attacks and uses
+// filepath.Rel for robust prefix checking, consistent with pkg/stream/stream.go.
 func isPathInMediaDirs(path string, mediaDirs []string) bool {
-	absPath, err := filepath.Abs(path)
+	resolvedPath, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return false
 	}
+	resolvedPath = filepath.Clean(resolvedPath)
+	if !filepath.IsAbs(resolvedPath) {
+		absPath, err := filepath.Abs(resolvedPath)
+		if err != nil {
+			return false
+		}
+		resolvedPath = absPath
+	}
+
 	for _, dir := range mediaDirs {
-		absDir, err := filepath.Abs(dir)
+		resolvedDir, err := filepath.EvalSymlinks(dir)
 		if err != nil {
 			continue
 		}
-		if strings.HasPrefix(absPath, absDir+string(filepath.Separator)) || absPath == absDir {
+		resolvedDir = filepath.Clean(resolvedDir)
+		if !filepath.IsAbs(resolvedDir) {
+			absDir, err := filepath.Abs(resolvedDir)
+			if err != nil {
+				continue
+			}
+			resolvedDir = absDir
+		}
+
+		rel, err := filepath.Rel(resolvedDir, resolvedPath)
+		if err != nil {
+			continue
+		}
+		if !strings.HasPrefix(rel, "..") {
 			return true
 		}
 	}

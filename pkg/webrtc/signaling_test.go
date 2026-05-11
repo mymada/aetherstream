@@ -9,13 +9,13 @@ import (
 )
 
 func TestSignalingServer(t *testing.T) {
-	srv := NewSignalingServer()
+	srv := NewSignalingServer(nil)
 	assert.NotNil(t, srv)
 	assert.Equal(t, 0, srv.PeerCount())
 }
 
 func TestPeerConnectionLifecycle(t *testing.T) {
-	srv := NewSignalingServer()
+	srv := NewSignalingServer(nil)
 
 	// Simulate peer creation (without actual WebSocket)
 	peer := &PeerConnection{
@@ -62,7 +62,7 @@ func TestICECandidate(t *testing.T) {
 }
 
 func TestSignalingServerConcurrency(t *testing.T) {
-	srv := NewSignalingServer()
+	srv := NewSignalingServer(nil)
 
 	// Add multiple peers concurrently
 	for i := 0; i < 10; i++ {

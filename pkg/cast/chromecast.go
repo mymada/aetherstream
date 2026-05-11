@@ -12,6 +12,23 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var (
+	rfc1918Nets = []*net.IPNet{
+		{IP: net.ParseIP("10.0.0.0"), Mask: net.CIDRMask(8, 32)},
+		{IP: net.ParseIP("172.16.0.0"), Mask: net.CIDRMask(12, 32)},
+		{IP: net.ParseIP("192.168.0.0"), Mask: net.CIDRMask(16, 32)},
+	}
+)
+
+func isRFC1918(ip net.IP) bool {
+	for _, n := range rfc1918Nets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // CastDevice represents a discovered Chromecast or AirPlay device
 type CastDevice struct {
 	ID       string `json:"id"`
@@ -41,15 +58,19 @@ type ChromecastController struct {
 	sessions map[string]*Session
 	stopCh   chan struct{}
 	baseURL  string // AetherStream base URL for constructing HLS URLs
+
+	// rate limiter: last time a new device was accepted per IP
+	discoveryRate map[string]time.Time
 }
 
 // NewChromecastController creates a Chromecast controller
 func NewChromecastController(baseURL string) *ChromecastController {
 	return &ChromecastController{
-		devices:  make(map[string]*CastDevice),
-		sessions: make(map[string]*Session),
-		stopCh:   make(chan struct{}),
-		baseURL:  strings.TrimRight(baseURL, "/"),
+		devices:       make(map[string]*CastDevice),
+		sessions:      make(map[string]*Session),
+		stopCh:        make(chan struct{}),
+		baseURL:       strings.TrimRight(baseURL, "/"),
+		discoveryRate: make(map[string]time.Time),
 	}
 }
 
@@ -168,6 +189,12 @@ func (cc *ChromecastController) ssdpDiscoveryLoop() {
 
 		msg := string(buf[:n])
 		if strings.Contains(msg, "Google") || strings.Contains(msg, "Chromecast") || strings.Contains(msg, "urn:dial-multiscreen-org:device:dial:1") {
+			if !isRFC1918(remoteAddr.IP) {
+				continue
+			}
+			if !cc.allowDiscovery(remoteAddr.IP.String()) {
+				continue
+			}
 			cc.registerDevice(remoteAddr.IP.String(), 8008, "chromecast", extractName(msg))
 		}
 	}
@@ -215,6 +242,17 @@ func (cc *ChromecastController) registerDevice(addr string, port int, devType, n
 	log.Info().Str("id", id).Str("name", name).Str("addr", addr).Int("port", port).Msg("chromecast discovered")
 }
 
+func (cc *ChromecastController) allowDiscovery(ip string) bool {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	last, ok := cc.discoveryRate[ip]
+	if ok && time.Since(last) < time.Minute {
+		return false
+	}
+	cc.discoveryRate[ip] = time.Now()
+	return true
+}
+
 func (cc *ChromecastController) pruneDevices() {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
@@ -250,7 +288,7 @@ func (cc *ChromecastController) launchAndLoad(dev *CastDevice, mediaURL string, 
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Warn().Err(err).Str("device", dev.ID).Msg("chromecast launch failed")
