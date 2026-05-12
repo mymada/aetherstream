@@ -64,6 +64,32 @@ export interface User {
   createdAt: string
 }
 
+export interface Chapter {
+  name: string
+  position: number
+}
+
+export interface TrickplayVTT {
+  vtt: string
+  interval: number
+}
+
+export interface ContinueWatchingItem {
+  id: string
+  name: string
+  posterUrl: string
+  position: number
+  duration: number
+}
+
+export interface HealthStatus {
+  status: string
+  version: string
+  uptime: string
+  dbConnected: boolean
+  ffmpegAvailable: boolean
+}
+
 export const apiClient = {
   login: (username: string, password: string) =>
     api<{ token: string }>('/auth/login', {
@@ -73,6 +99,9 @@ export const apiClient = {
 
   systemInfo: () =>
     api<{ name: string; version: string; status: string }>('/system/info'),
+
+  health: () => api<HealthStatus>('/health'),
+  ready: () => api<{ status: string }>('/ready'),
 
   listLibraries: () => api<Library[]>('/api/libraries'),
   createLibrary: (name: string, path: string, mediaType: string) =>
@@ -88,6 +117,17 @@ export const apiClient = {
   getItem: (id: string) => api<MediaItem>(`/api/items/${id}`),
   listSubtitles: (id: string) =>
     api<{ language: string; type: string }[]>(`/api/items/${id}/subtitles`),
+
+  listChapters: (id: string) => api<Chapter[]>(`/api/items/${id}/chapters`),
+  getChapterAt: (id: string, position: number) =>
+    api<Chapter>(`/api/items/${id}/chapters/at?position=${position}`),
+  getTrickplay: (id: string) => api<TrickplayVTT>(`/api/items/${id}/trickplay`),
+  getContinueWatching: () => api<ContinueWatchingItem[]>('/api/continue-watching'),
+  saveProgress: (id: string, position: number, duration: number) =>
+    api<void>(`/api/items/${id}/progress`, {
+      method: 'POST',
+      body: JSON.stringify({ position, duration }),
+    }),
 
   listCollections: () => api<Collection[]>('/api/collections'),
   createCollection: (name: string, type?: string) =>
