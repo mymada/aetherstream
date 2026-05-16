@@ -519,6 +519,49 @@ func (d *DB) GetSessionLastSeen(sessionID string) (time.Time, error) {
 	return lastSeen, err
 }
 
+// GetDevicesByAccount returns distinct devices seen in streaming sessions for an account.
+func (d *DB) GetDevicesByAccount(accountID string) ([]map[string]interface{}, error) {
+	rows, err := d.Query(`
+		SELECT device_id, ip_address, client,
+		       MIN(created_at) AS first_seen,
+		       MAX(last_seen)  AS last_seen
+		FROM sessions
+		WHERE user_id = ? AND device_id != ''
+		GROUP BY device_id
+		ORDER BY last_seen DESC
+	`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devices []map[string]interface{}
+	for rows.Next() {
+		var deviceID, ip, client string
+		var firstSeen, lastSeen time.Time
+		if err := rows.Scan(&deviceID, &ip, &client, &firstSeen, &lastSeen); err != nil {
+			continue
+		}
+		devices = append(devices, map[string]interface{}{
+			"id":         deviceID,
+			"ip":         ip,
+			"client":     client,
+			"first_seen": firstSeen,
+			"last_seen":  lastSeen,
+		})
+	}
+	if devices == nil {
+		devices = []map[string]interface{}{}
+	}
+	return devices, rows.Err()
+}
+
+// RevokeDevice deletes all sessions associated with a device_id for an account.
+func (d *DB) RevokeDevice(accountID, deviceID string) error {
+	_, err := d.Exec("DELETE FROM sessions WHERE user_id = ? AND device_id = ?", accountID, deviceID)
+	return err
+}
+
 // --- Users (extended) ---
 
 // UpdateUserRole changes user role

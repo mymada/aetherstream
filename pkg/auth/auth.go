@@ -13,9 +13,10 @@ import (
 // Claims extends jwt.RegisteredClaims with AetherStream-specific fields
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role"` // admin, user
+	UserID    string `json:"user_id"`
+	Username  string `json:"username"`
+	Role      string `json:"role"` // admin, user
+	ProfileID string `json:"profile_id,omitempty"`
 	// SwiftFlow integration: device info from captive portal
 	DeviceID    string `json:"device_id,omitempty"`
 	BandwidthKB int    `json:"bandwidth_kb,omitempty"` // from SwiftFlow QoS
@@ -53,6 +54,25 @@ func (s *Service) GenerateToken(userID, username, role string) (string, error) {
 		Role:     role,
 	}
 
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.secret)
+}
+
+// GenerateTokenWithProfile creates a JWT that also encodes the active profile ID.
+func (s *Service) GenerateTokenWithProfile(userID, username, role, profileID string) (string, error) {
+	now := time.Now()
+	claims := Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttl)),
+			Issuer:    "aetherstream",
+		},
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
+		ProfileID: profileID,
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.secret)
 }
@@ -101,6 +121,8 @@ func (s *Service) Middleware() echo.MiddlewareFunc {
 			}
 
 			c.Set("user", claims)
+			c.Set("account_id", claims.UserID)
+			c.Set("role", claims.Role)
 			return next(c)
 		}
 	}
