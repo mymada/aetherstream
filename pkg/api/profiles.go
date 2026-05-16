@@ -45,6 +45,9 @@ func (pr *ProfileRoutes) handleListProfiles(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+	if profiles == nil {
+		profiles = []*db.UserProfile{}
+	}
 	return c.JSON(http.StatusOK, profiles)
 }
 
