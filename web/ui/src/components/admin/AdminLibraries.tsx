@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { apiClient } from '../../api/client.ts'
 import { C, R, T } from '../../design.ts'
 import type { Library } from '../../api/client.ts'
+import FolderPickerModal from '../FolderPickerModal.tsx'
 
 export default function AdminLibraries() {
   const [libraries, setLibraries] = useState<Library[]>([])
@@ -13,6 +14,7 @@ export default function AdminLibraries() {
   const [newType, setNewType] = useState('movie')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [showPicker, setShowPicker] = useState(false)
 
   useEffect(() => {
     loadLibraries()
@@ -67,6 +69,13 @@ export default function AdminLibraries() {
 
   return (
     <div>
+      {showPicker && (
+        <FolderPickerModal
+          initialPath={newPath || undefined}
+          onSelect={(p) => { setNewPath(p); setShowPicker(false) }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
       <h1 style={{ fontSize: T['2xl'], fontWeight: 700, marginBottom: 24 }}>Bibliothèques</h1>
 
       {error && <Alert type="error">{error}</Alert>}
@@ -86,11 +95,21 @@ export default function AdminLibraries() {
           </div>
           <div style={{ flex: 2, minWidth: 200 }}>
             <label style={{ display: 'block', fontSize: T.xs, color: C.text2, marginBottom: 4 }}>Chemin</label>
-            <input
-              value={newPath} onChange={(e) => setNewPath(e.target.value)}
-              placeholder="ex: /media/films"
-              style={{ width: '100%', padding: '8px 12px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: R.md, color: C.text, fontSize: T.sm }}
-            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                value={newPath} onChange={(e) => setNewPath(e.target.value)}
+                placeholder="ex: /media/films"
+                style={{ flex: 1, padding: '8px 12px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: R.md, color: C.text, fontSize: T.sm, fontFamily: 'monospace' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPicker(true)}
+                title="Parcourir le serveur"
+                style={{ padding: '8px 10px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: R.md, color: C.text2, cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+              >
+                📁
+              </button>
+            </div>
           </div>
           <div style={{ width: 140 }}>
             <label style={{ display: 'block', fontSize: T.xs, color: C.text2, marginBottom: 4 }}>Type</label>
