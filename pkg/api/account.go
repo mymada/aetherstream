@@ -38,18 +38,31 @@ func (ar *AccountRoutes) handleGetMyAccount(c echo.Context) error {
 	}
 
 	account, err := ar.db.GetAccountByID(accountID)
+	if err == nil {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"id":          account.ID,
+			"email":       account.Email,
+			"role":        account.Role,
+			"maxProfiles": account.MaxProfiles,
+			"dataQuotaMB": account.DataQuotaMB,
+			"dataUsedMB":  account.DataUsedMB,
+			"createdAt":   account.CreatedAt,
+		})
+	}
+
+	// Fallback: legacy users table (accounts table may not have been populated yet)
+	user, err := ar.db.GetUserByID(accountID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "account not found")
 	}
-
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"id":          account.ID,
-		"email":       account.Email,
-		"role":        account.Role,
-		"maxProfiles": account.MaxProfiles,
-		"dataQuotaMB": account.DataQuotaMB,
-		"dataUsedMB":  account.DataUsedMB,
-		"createdAt":   account.CreatedAt,
+		"id":          user["id"],
+		"email":       user["username"], // username acts as identifier for legacy users
+		"role":        user["role"],
+		"maxProfiles": 5,
+		"dataQuotaMB": 0,
+		"dataUsedMB":  0,
+		"createdAt":   user["createdAt"],
 	})
 }
 
