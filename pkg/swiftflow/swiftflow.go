@@ -2,6 +2,9 @@ package swiftflow
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,9 +13,10 @@ import (
 
 // Client talks to SwiftFlow captive portal / QoS API
 type Client struct {
-	baseURL string
-	apiKey  string
-	client  *http.Client
+	baseURL       string
+	apiKey        string
+	webhookSecret string
+	client        *http.Client
 }
 
 // NewClient creates SwiftFlow API client
@@ -22,6 +26,12 @@ func NewClient(baseURL, apiKey string) *Client {
 		apiKey:  apiKey,
 		client:  &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+// WithWebhookSecret configures the HMAC secret used to validate incoming webhooks.
+func (c *Client) WithWebhookSecret(secret string) *Client {
+	c.webhookSecret = secret
+	return c
 }
 
 // DeviceInfo from SwiftFlow captive portal
@@ -102,9 +112,17 @@ type AuthWebhookPayload struct {
 	Token         string `json:"token"` // SwiftFlow session token
 }
 
-// ValidateWebhook verifies SwiftFlow webhook signature (placeholder)
+// ValidateWebhook verifies a SwiftFlow webhook HMAC-SHA256 signature.
+// The signature header contains the hex digest of HMAC-SHA256(secret, body).
 func (c *Client) ValidateWebhook(payload []byte, signature string) bool {
-	// TODO: HMAC-SHA256 validation with webhook_secret
-	// For Phase 1: trust all webhooks from configured SwiftFlow
-	return true
+	if c.webhookSecret == "" {
+		return true // no secret configured — accept (dev mode)
+	}
+	if signature == "" {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(c.webhookSecret))
+	mac.Write(payload)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(signature))
 }

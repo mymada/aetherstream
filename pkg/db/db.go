@@ -402,6 +402,11 @@ func (d *DB) CreateItem(id, libraryID, path, name, mediaType, container string, 
 	return err
 }
 
+func (d *DB) UpdateItemDuration(id string, duration float64) error {
+	_, err := d.Exec("UPDATE items SET duration_seconds = ? WHERE id = ?", duration, id)
+	return err
+}
+
 // GetItemByID fetches single item
 func (d *DB) GetItemByID(id string) (*Item, error) {
 	row := d.QueryRow(
@@ -980,4 +985,80 @@ func (d *DB) GetPlaybackReporting(userID string) (map[string]interface{}, error)
 		"playbackProgress": progress,
 		"watchHistory":     history,
 	}, nil
+}
+
+// GetContinueWatching returns items in progress (> 0% and < 95% watched) for a user.
+func (d *DB) GetContinueWatching(userID string) ([]Item, error) {
+	rows, err := d.Query(`
+		SELECT i.id, i.library_id, i.path, i.name, i.media_type, i.container, i.size_bytes, i.duration_seconds, i.width, i.height, i.video_codec, i.audio_codec, i.created_at
+		FROM items i
+		JOIN playback_progress pp ON pp.item_id = i.id
+		WHERE pp.user_id = ? AND pp.percent_complete > 0 AND pp.percent_complete < 95
+		ORDER BY pp.updated_at DESC
+		LIMIT 20`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []Item
+	for rows.Next() {
+		var it Item
+		if err := rows.Scan(&it.ID, &it.LibraryID, &it.Path, &it.Name, &it.MediaType, &it.Container,
+			&it.SizeBytes, &it.DurationSeconds, &it.Width, &it.Height, &it.VideoCodec, &it.AudioCodec, &it.CreatedAt); err != nil {
+			continue
+		}
+		items = append(items, it)
+	}
+	return items, nil
+}
+
+// UpdateItemMetadata updates an item's metadata fields.
+func (d *DB) UpdateItemMetadata(item *Item) error {
+	_, err := d.DB.Exec(`
+		UPDATE items SET
+			year = ?,
+			genre = ?,
+			overview = ?,
+			poster_url = ?,
+			backdrop_url = ?,
+			vote_average = ?,
+			runtime = ?
+		WHERE id = ?
+	`, item.Year, item.Genre, item.Overview, item.PosterURL, item.BackdropURL, item.VoteAverage, item.Runtime, item.ID)
+	return err
+}
+
+// ListUnenrichedItems returns items without metadata enrichment.
+func (d *DB) ListUnenrichedItems(limit int) ([]Item, error) {
+	rows, err := d.DB.Query(`
+		SELECT id, library_id, path, name, type, container, size_bytes, duration,
+			width, height, video_codec, audio_codec, chapters, year, genre, overview,
+			poster_url, backdrop_url, vote_average, runtime, created_at
+		FROM items
+		WHERE year = 0 AND genre = ''
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []Item
+	for rows.Next() {
+		var i Item
+		err := rows.Scan(
+			&i.ID, &i.LibraryID, &i.Path, &i.Name, &i.MediaType, &i.Container,
+			&i.SizeBytes, &i.DurationSeconds, &i.Width, &i.Height,
+			&i.VideoCodec, &i.AudioCodec, &i.Chapters,
+			&i.Year, &i.Genre, &i.Overview, &i.PosterURL, &i.BackdropURL,
+			&i.VoteAverage, &i.Runtime, &i.CreatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
 }

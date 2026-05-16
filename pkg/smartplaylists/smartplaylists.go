@@ -2,6 +2,7 @@ package smartplaylists
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -196,15 +197,20 @@ func buildNumericClause(field, op, value string) (string, []interface{}) {
 	return fmt.Sprintf("%s %s ?", field, strings.ToUpper(op)), []interface{}{value}
 }
 
-// jsonMarshal is a tiny helper to avoid importing encoding/json directly in this file for the test stub.
+// jsonMarshal serialises v to a JSON string.
 func jsonMarshal(v interface{}) (string, error) {
-	// We use fmt.Sprintf for simple slice of empty structs to avoid import cycle issues in minimal builds.
-	// Real implementation uses encoding/json.
-	return "[]", nil
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "[]", err
+	}
+	return string(b), nil
 }
 
 // jsonUnmarshalRules parses a JSON string into []Rule.
 func jsonUnmarshalRules(s string) []Rule {
-	// Minimal stub: return empty slice.
-	return []Rule{}
+	var rules []Rule
+	if err := json.Unmarshal([]byte(s), &rules); err != nil {
+		return []Rule{}
+	}
+	return rules
 }
